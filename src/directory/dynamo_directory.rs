@@ -5,19 +5,33 @@ use aws_sdk_dynamodb::{
     types::Blob,
 };
 use std::{cell::Cell, collections::HashMap, io::BufWriter, io::Write, sync::Arc};
-use tantivy::{
-    directory::{error::OpenReadError, OwnedBytes},
-    Directory,
-};
+use tantivy::{directory::OwnedBytes, Directory};
 use tantivy_common::TerminatingWrite;
 use tokio::runtime::Runtime;
 
-trait DDBSave {
+trait DynamoRecord<PK> {
     fn serialize(&self) -> HashMap<String, AttributeValue>;
+
+    fn deserialize(item: &HashMap<String, AttributeValue>) -> Self;
+
+    fn format_pk(pk: PK) -> String;
 
     fn save(&self, table: &DynamoTable) -> Result<()> {
         table.put_item_sync(self.serialize())?;
         Ok(())
+    }
+
+    fn list(table: &DynamoTable, pk: PK) -> Result<Vec<Self>>
+    where
+        Self: Sized,
+    {
+        Ok(table
+            .list_sync(&Self::format_pk(pk))?
+            .items()
+            .unwrap()
+            .iter()
+            .map(DynamoRecord::deserialize)
+            .collect::<Vec<Self>>())
     }
 }
 
@@ -81,15 +95,16 @@ struct DynamoFilePart {
     content: Vec<u8>,
 }
 
-impl DDBSave for DynamoFilePart {
+impl DynamoRecord<(&str, &str)> for DynamoFilePart {
+    fn format_pk(pk: (&str, &str)) -> String {
+        format!("directory|{}|file|{}", pk.0, pk.1)
+    }
+
     fn serialize(&self) -> HashMap<String, AttributeValue> {
         HashMap::from([
             (
                 "pk".to_string(),
-                S(format!(
-                    "directory|{}|file|{}",
-                    self.directory_id, self.path
-                )),
+                S(Self::format_pk((&self.directory_id, &self.path))),
             ),
             ("sk".to_string(), S(format!("part|{}", self.part))),
             ("directory".to_string(), S(self.directory_id.to_string())),
@@ -98,6 +113,27 @@ impl DDBSave for DynamoFilePart {
             ("content".to_string(), B(Blob::new(self.content.clone()))),
         ])
     }
+
+    fn deserialize(item: &HashMap<String, AttributeValue>) -> Self {
+        DynamoFilePart {
+            content: item
+                .get("content")
+                .unwrap()
+                .as_b()
+                .unwrap()
+                .as_ref()
+                .to_vec(),
+            directory_id: item.get("directory").unwrap().as_s().unwrap().to_string(),
+            part: item
+                .get("part")
+                .unwrap()
+                .as_n()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap(),
+            path: item.get("directory").unwrap().as_s().unwrap().to_string(),
+        }
+    }
 }
 
 struct DynamoFileHeader {
@@ -105,17 +141,25 @@ struct DynamoFileHeader {
     path: String,
 }
 
-impl DDBSave for DynamoFileHeader {
+impl DynamoRecord<&str> for DynamoFileHeader {
+    fn format_pk(pk: &str) -> String {
+        format!("directory|{}|file-headers", pk)
+    }
+
     fn serialize(&self) -> HashMap<String, AttributeValue> {
         HashMap::from([
-            (
-                "pk".to_string(),
-                S(format!("directory|{}|file-headers", self.directory_id)),
-            ),
+            ("pk".to_string(), S(Self::format_pk(&self.directory_id))),
             ("sk".to_string(), S(format!("header|{}", self.path))),
             ("path".to_string(), S(self.path.to_string())),
             ("directory".to_string(), S(self.directory_id.to_string())),
         ])
+    }
+
+    fn deserialize(item: &HashMap<String, AttributeValue>) -> Self {
+        DynamoFileHeader {
+            directory_id: item.get("directory").unwrap().as_s().unwrap().to_string(),
+            path: item.get("directory").unwrap().as_s().unwrap().to_string(),
+        }
     }
 }
 
@@ -140,41 +184,7 @@ impl Directory for DynamoDirectory {
         path: &std::path::Path,
     ) -> Result<Box<dyn tantivy::directory::FileHandle>, tantivy::directory::error::OpenReadError>
     {
-        let results = self
-            .table
-            .list_sync(&format!(
-                "directory|{}|file|{}",
-                self.id,
-                path.to_str().unwrap()
-            ))
-            .map_err(|e| OpenReadError::IoError {
-                io_error: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-                filepath: path.to_path_buf(),
-            })?;
-
-        let parts = results
-            .items()
-            .unwrap()
-            .iter()
-            .map(|x| DynamoFilePart {
-                content: x
-                    .get("content")
-                    .unwrap()
-                    .as_b()
-                    .unwrap()
-                    .clone()
-                    .into_inner(),
-                directory_id: x.get("directory").unwrap().as_s().unwrap().to_string(),
-                part: x
-                    .get("part")
-                    .unwrap()
-                    .as_n()
-                    .unwrap()
-                    .parse::<usize>()
-                    .unwrap(),
-                path: x.get("directory").unwrap().as_s().unwrap().to_string(),
-            })
-            .collect::<Vec<DynamoFilePart>>();
+        let parts = DynamoFilePart::list(&self.table, (&self.id, path.to_str().unwrap())).unwrap();
 
         let content: Vec<u8> = parts.iter().flat_map(|part| part.content.clone()).collect();
 
