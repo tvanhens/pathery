@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build:lambda": "cargo lambda build --arm64 -l target/lambda"
+    "build:lambda": "cargo lambda build --release --arm64 -l target/lambda"
   },
   "keywords": [],
   "author": "",

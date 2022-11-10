@@ -1,6 +1,6 @@
 [workspace]
 
 members = [
-    "packages/pathery-core",
+    "packages/pathery",
     "handlers/post-index"
 ]

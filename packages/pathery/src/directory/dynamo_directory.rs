@@ -247,27 +247,27 @@ mod tests {
         config.try_deserialize::<DevEnvOutputs>().unwrap()
     }
 
-    #[test]
-    fn write_and_read() {
-        let config = load_config();
-        println!("{:?}", config);
-        let path = std::path::Path::new("hello.txt");
-        let part1 = "hello world".as_bytes();
-        let part2 = "stuff and things".as_bytes();
+    // #[test]
+    // fn write_and_read() {
+    //     let config = load_config();
+    //     println!("{:?}", config);
+    //     let path = std::path::Path::new("hello.txt");
+    //     let part1 = "hello world".as_bytes();
+    //     let part2 = "stuff and things".as_bytes();
 
-        let directory =
-            DynamoDirectory::create(&config.pathery_dev.test_table_name, "1234").unwrap();
-        let mut writer = directory.open_write(path).unwrap();
+    //     let directory =
+    //         DynamoDirectory::create(&config.pathery_dev.test_table_name, "1234").unwrap();
+    //     let mut writer = directory.open_write(path).unwrap();
 
-        writer.get_mut().write(part1).unwrap();
-        writer.get_mut().write(part2).unwrap();
+    //     writer.get_mut().write(part1).unwrap();
+    //     writer.get_mut().write(part2).unwrap();
 
-        writer.terminate().unwrap();
+    //     writer.terminate().unwrap();
 
-        let handle = directory.open_read(path).unwrap();
+    //     let handle = directory.open_read(path).unwrap();
 
-        let read_bytes = handle.read_bytes().unwrap().to_vec();
+    //     let read_bytes = handle.read_bytes().unwrap().to_vec();
 
-        assert_eq!(read_bytes, [part1, part2].concat().to_vec());
-    }
+    //     assert_eq!(read_bytes, [part1, part2].concat().to_vec());
+    // }
 }
