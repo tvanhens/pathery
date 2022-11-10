@@ -1,4 +1,5 @@
 mod directory;
+mod filestore;
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
@@ -15,7 +16,7 @@ pub struct Indexer {
 
 impl Indexer {
     pub fn create() -> Result<Indexer> {
-        let directory = IndexerDirectory::create();
+        let directory = IndexerDirectory::create("test");
         let mut schema = Schema::builder();
 
         schema.add_text_field("title", TEXT | STORED);

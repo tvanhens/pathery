@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "cargo test"
+    "test": "cargo test",
+    "build": "cargo build"
   },
   "dependencies": {
     "@internal/dev-env": "workspace:*"

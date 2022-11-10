@@ -1,17 +1,20 @@
 use lambda_http::{run, service_fn, Body, Error, Request, Response};
 use pathery::indexer::Indexer;
+use tokio::runtime::Handle;
 
-/// This is the main body for the function.
-/// Write your code inside it.
-/// There are some code example in the following URLs:
-/// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
 async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     if let Body::Text(body) = event.body() {
-        let value = serde_json::from_str::<serde_json::Value>(body)?;
+        let body_safe = body.to_string();
+        Handle::current()
+            .spawn_blocking(move || {
+                let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
 
-        let mut indexer = Indexer::create()?;
+                let mut indexer = Indexer::create().unwrap();
 
-        indexer.index_doc(value)?;
+                indexer.index_doc(value).unwrap();
+            })
+            .await
+            .unwrap();
     }
 
     let resp = Response::builder()
@@ -26,9 +29,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
 async fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
-        // disable printing the name of the module in every log line.
         .with_target(false)
-        // disabling time is handy because CloudWatch will add the ingestion time.
         .without_time()
         .init();
 

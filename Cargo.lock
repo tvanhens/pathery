@@ -1365,6 +1365,7 @@ dependencies = [
  "tantivy",
  "tantivy-common",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

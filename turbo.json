@@ -7,7 +7,12 @@
       "dependsOn": ["^bootstrap:dev"],
       "outputs": []
     },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "build:lambda": {
+      "dependsOn": ["^build"],
       "outputs": ["target/"]
     },
     "synth": {

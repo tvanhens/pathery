@@ -5,6 +5,9 @@
   "scripts": {
     "build:lambda": "cargo lambda build --release --arm64 -l target/lambda"
   },
+  "dependencies": {
+    "@internal/pathery-core": "workspace:*"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC"
