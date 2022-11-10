@@ -2,5 +2,5 @@
 
 members = [
     "packages/pathery-core",
-    "handlers/hello"
+    "handlers/post-index"
 ]

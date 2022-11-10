@@ -1,5 +1,5 @@
 {
-  "name": "@internal/hello-handler",
+  "name": "@internal/handler-post-index",
   "version": "1.0.0",
   "description": "",
   "scripts": {

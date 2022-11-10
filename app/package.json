@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "synth": "cdk synth"
+    "deploy": "cdk deploy -O cdk-outputs.json --require-approval never --method direct"
   },
   "dependencies": {
-    "@internal/hello-handler": "workspace:*"
+    "@internal/handler-post-index": "workspace:*"
   },
   "keywords": [],
   "author": "",

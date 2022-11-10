@@ -24,14 +24,14 @@ importers:
 
   app:
     specifiers:
-      '@internal/hello-handler': workspace:*
+      '@internal/handler-post-index': workspace:*
     dependencies:
-      '@internal/hello-handler': link:../handlers/hello
+      '@internal/handler-post-index': link:../handlers/post-index
 
   dev-env:
     specifiers: {}
 
-  handlers/hello:
+  handlers/post-index:
     specifiers: {}
 
   packages/pathery-core:
