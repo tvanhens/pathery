@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "cdk synth",
-    "bootstrap:dev": "cdk deploy -m direct dev-resources"
+    "bootstrap:dev": "cdk deploy -O dev-env.json -m direct dev-resources"
   },
   "keywords": [],
   "author": "",

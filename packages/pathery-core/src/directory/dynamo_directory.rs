@@ -215,18 +215,46 @@ impl Directory for DynamoDirectory {
 
 #[cfg(test)]
 mod tests {
+    use config::Config;
+    use serde::Deserialize;
+    use serde::Serialize;
+
     use super::Directory;
     use super::DynamoDirectory;
     use super::TerminatingWrite;
     use super::Write;
 
+    #[derive(Serialize, Deserialize, Debug)]
+    struct DevStackConfig {
+        #[serde(rename = "TestTableName")]
+        test_table_name: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct TestConfig {
+        #[serde(rename = "pathery-dev")]
+        pathery_dev: DevStackConfig,
+    }
+
+    fn load_config() -> TestConfig {
+        let config = Config::builder()
+            .add_source(config::File::with_name("../../dev-env.json"))
+            .build()
+            .unwrap();
+
+        config.try_deserialize::<TestConfig>().unwrap()
+    }
+
     #[test]
     fn write_and_read() {
+        let config = load_config();
+        println!("{:?}", config);
         let path = std::path::Path::new("hello.txt");
         let part1 = "hello world".as_bytes();
         let part2 = "stuff and things".as_bytes();
 
-        let directory = DynamoDirectory::create("test-table", "1234").unwrap();
+        let directory =
+            DynamoDirectory::create(&config.pathery_dev.test_table_name, "1234").unwrap();
         let mut writer = directory.open_write(path).unwrap();
 
         writer.get_mut().write(part1).unwrap();
