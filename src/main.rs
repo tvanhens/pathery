@@ -1,4 +1,5 @@
 mod directory;
+mod dynamo;
 
 use anyhow::Result;
 use directory::DynamoDirectory;
