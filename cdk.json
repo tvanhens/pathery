@@ -1,0 +1,4 @@
+{
+  "app": "ts-node --swc cdk/app.ts",
+  "profile": "nederworks"
+}
