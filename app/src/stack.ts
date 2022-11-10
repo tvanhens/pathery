@@ -22,7 +22,9 @@ export class DevResourcesStack extends Stack {
     });
 
     new Function(this, "TestFn", {
-      code: Code.fromAsset("target/lambda/hello"),
+      code: Code.fromAsset(
+        "node_modules/@internal/hello-handler/target/lambda/hello"
+      ),
       runtime: Runtime.PROVIDED_AL2,
       handler: "default",
       architecture: Architecture.ARM_64,

@@ -1,5 +1,7 @@
-target/
-packages/*/target
-node_modules/
-cdk.out
+node_modules
 dev-env.json
+
+.turbo
+
+cdk.out
+target

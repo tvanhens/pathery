@@ -1,0 +1,14 @@
+{
+  "pipeline": {
+    "build:lambda": {
+      "outputs": ["target/"]
+    },
+    "synth": {
+      "dependsOn": ["^build:lambda"],
+      "outputs": ["cdk.out"]
+    },
+    "deploy": {
+      "dependsOn": ["^build:lambda"]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@internal/hello-handler",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build:lambda": "cargo lambda build --arm64 -l target/lambda"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
