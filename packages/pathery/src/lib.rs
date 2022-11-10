@@ -1,5 +1,3 @@
-mod directory;
-mod dynamo;
 pub mod indexer;
 
 #[cfg(test)]

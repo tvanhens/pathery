@@ -14,17 +14,21 @@ use super::filestore::{DynamoFileStore, FileStore};
 pub struct IndexerDirectory {
     inner: RamDirectory,
     store: Arc<DynamoFileStore>,
+    stored_files: Arc<Mutex<Vec<String>>>,
     staged_files: Arc<Mutex<Vec<String>>>,
 }
 
 impl IndexerDirectory {
     pub fn create(store_id: &str) -> IndexerDirectory {
         let table_name = std::env::var("TABLE_NAME").unwrap();
+        let store = Arc::new(DynamoFileStore::create(&table_name, store_id));
+        let stored_files = Arc::new(Mutex::new(store.list_files().unwrap()));
 
         IndexerDirectory {
             inner: RamDirectory::create(),
             staged_files: Arc::new(Mutex::new(Vec::new())),
-            store: Arc::new(DynamoFileStore::create(&table_name, store_id)),
+            stored_files,
+            store,
         }
     }
 }
@@ -48,8 +52,14 @@ impl Directory for IndexerDirectory {
         &self,
         path: &std::path::Path,
     ) -> Result<bool, tantivy::directory::error::OpenReadError> {
-        println!("exists: {}", path.to_str().unwrap());
-        self.inner.exists(path)
+        let stored_files = (*self.stored_files.lock().unwrap()).to_owned();
+        let staged_files = (*self.staged_files.lock().unwrap()).to_owned();
+        let all_files = [stored_files, staged_files].concat();
+        println!(
+            "exists: {}",
+            all_files.contains(&path.to_str().unwrap().to_string())
+        );
+        Ok(all_files.contains(&path.to_str().unwrap().to_string()))
     }
 
     fn open_write(
@@ -70,7 +80,17 @@ impl Directory for IndexerDirectory {
         path: &std::path::Path,
     ) -> Result<Vec<u8>, tantivy::directory::error::OpenReadError> {
         println!("atomic_read: {}", path.to_str().unwrap());
-        self.inner.atomic_read(path)
+        if self.inner.exists(path)? {
+            self.inner.atomic_read(path)
+        } else if !self.exists(path)? {
+            Err(tantivy::directory::error::OpenReadError::FileDoesNotExist(
+                path.to_path_buf(),
+            ))
+        } else {
+            let content = self.store.get_content(path.to_str().unwrap()).unwrap();
+            self.inner.atomic_write(path, &content).unwrap();
+            Ok(content)
+        }
     }
 
     fn atomic_write(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {

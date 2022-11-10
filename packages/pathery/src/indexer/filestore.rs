@@ -107,15 +107,17 @@ impl FileStore for DynamoFileStore {
                 .send(),
         )?;
 
-        Ok(response
-            .item()
-            .unwrap()
-            .get("content")
-            .unwrap()
-            .as_b()
-            .unwrap()
-            .clone()
-            .into_inner())
+        if let Some(item) = response.item() {
+            Ok(item
+                .get("content")
+                .unwrap()
+                .as_b()
+                .unwrap()
+                .clone()
+                .into_inner())
+        } else {
+            Ok(Vec::new())
+        }
     }
 }
 
