@@ -1,5 +1,12 @@
 {
   "pipeline": {
+    "bootstrap:dev": {
+      "outputs": ["cdk-outputs.json"]
+    },
+    "test": {
+      "dependsOn": ["^bootstrap:dev"],
+      "outputs": []
+    },
     "build:lambda": {
       "outputs": ["target/"]
     },
@@ -8,7 +15,8 @@
       "outputs": ["cdk.out"]
     },
     "deploy": {
-      "dependsOn": ["^build:lambda"]
+      "dependsOn": ["^build:lambda"],
+      "outputs": ["cdk.out"]
     }
   }
 }

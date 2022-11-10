@@ -1,0 +1,12 @@
+{
+  "name": "@internal/dev-env",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "bootstrap:dev": "cdk deploy -O cdk-outputs.json --method direct"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

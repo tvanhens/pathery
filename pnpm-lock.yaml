@@ -28,8 +28,17 @@ importers:
     dependencies:
       '@internal/hello-handler': link:../handlers/hello
 
+  dev-env:
+    specifiers: {}
+
   handlers/hello:
     specifiers: {}
+
+  packages/pathery-core:
+    specifiers:
+      '@internal/dev-env': workspace:*
+    dependencies:
+      '@internal/dev-env': link:../../dev-env
 
 packages:
 

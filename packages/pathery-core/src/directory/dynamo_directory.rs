@@ -231,18 +231,20 @@ mod tests {
     }
 
     #[derive(Serialize, Deserialize, Debug)]
-    struct TestConfig {
+    struct DevEnvOutputs {
         #[serde(rename = "pathery-dev")]
         pathery_dev: DevStackConfig,
     }
 
-    fn load_config() -> TestConfig {
+    fn load_config() -> DevEnvOutputs {
         let config = Config::builder()
-            .add_source(config::File::with_name("../../dev-env.json"))
+            .add_source(config::File::with_name(
+                "node_modules/@internal/dev-env/cdk-outputs.json",
+            ))
             .build()
             .unwrap();
 
-        config.try_deserialize::<TestConfig>().unwrap()
+        config.try_deserialize::<DevEnvOutputs>().unwrap()
     }
 
     #[test]

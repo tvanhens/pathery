@@ -1,13 +1,12 @@
 {
-  "name": "app",
+  "name": "@internal/pathery-core",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "synth": "cdk synth"
+    "test": "cargo test"
   },
   "dependencies": {
-    "@internal/hello-handler": "workspace:*"
+    "@internal/dev-env": "workspace:*"
   },
   "keywords": [],
   "author": "",

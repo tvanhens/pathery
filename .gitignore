@@ -5,3 +5,4 @@ dev-env.json
 
 cdk.out
 target
+cdk-outputs.json
