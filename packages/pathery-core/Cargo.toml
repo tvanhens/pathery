@@ -1,0 +1,12 @@
+[package]
+name = "pathery-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.66"
+aws-config = "0.51.0"
+aws-sdk-dynamodb = "0.21.0"
+tantivy = "0.18.1"
+tantivy-common = "0.3.0"
+tokio = { version = "1", features = ["full"] }
