@@ -1,6 +1,3 @@
-mod directory;
-mod filestore;
-
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use tantivy::{
@@ -8,7 +5,7 @@ use tantivy::{
     Document, Index, IndexWriter,
 };
 
-use self::directory::IndexerDirectory;
+use crate::directory::IndexerDirectory;
 
 pub struct Indexer {
     writer: IndexWriter,
@@ -21,8 +18,6 @@ impl Indexer {
 
         schema.add_text_field("title", TEXT | STORED);
         schema.add_text_field("body", TEXT);
-
-        println!("Opening");
 
         let index = Index::open_or_create(directory, schema.build())?;
 

@@ -16,6 +16,8 @@ fn format_file_content_pk(store_id: &str, path: &str) -> AttributeValue {
 }
 
 pub trait FileStore {
+    fn delete(&self, path: &str) -> Result<()>;
+    fn exists(&self, path: &str) -> Result<bool>;
     fn write_file(&self, path: &str, content: &Vec<u8>) -> Result<()>;
     fn list_files(&self) -> Result<Vec<String>>;
     fn get_content(&self, path: &str) -> Result<Vec<u8>>;
@@ -77,6 +79,26 @@ impl FileStore for DynamoFileStore {
         Ok(())
     }
 
+    fn exists(&self, path: &str) -> Result<bool> {
+        match self
+            .rt
+            .block_on(
+                self.client
+                    .get_item()
+                    .table_name(&self.table_name)
+                    .key("pk", format_file_header_pk(&self.store_id))
+                    .key("sk", AttributeValue::S(format!("file_header|{}", path)))
+                    .consistent_read(true)
+                    .send(),
+            )
+            .unwrap()
+            .item()
+        {
+            Some(_item) => Ok(true),
+            None => Ok(false),
+        }
+    }
+
     fn list_files(&self) -> Result<Vec<String>> {
         let response = self.rt.block_on(
             self.client
@@ -119,6 +141,18 @@ impl FileStore for DynamoFileStore {
             Ok(Vec::new())
         }
     }
+
+    fn delete(&self, path: &str) -> Result<()> {
+        self.rt.block_on(
+            self.client
+                .delete_item()
+                .table_name(&self.table_name)
+                .key("pk", format_file_header_pk(&self.store_id))
+                .key("sk", AttributeValue::S(format!("file_header|{}", path)))
+                .send(),
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -137,9 +171,14 @@ mod tests {
     #[test]
     fn write_and_read_file() -> Result<()> {
         let store = test_store();
+
+        assert_eq!(false, store.exists("hello.txt")?);
+
         let content = "hello world!".as_bytes().to_vec();
 
         store.write_file("hello.txt", &content)?;
+
+        assert_eq!(true, store.exists("hello.txt")?);
 
         let files = store.list_files()?;
 
@@ -148,6 +187,10 @@ mod tests {
         let read_content = store.get_content(files.get(0).unwrap())?;
 
         assert_eq!(content, read_content);
+
+        store.delete("hello.txt")?;
+
+        assert_eq!(false, store.exists("hello.txt")?);
 
         Ok(())
     }
