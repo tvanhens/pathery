@@ -38,9 +38,7 @@ impl AppConfig {
             .to_owned()
             .map(|o| o.pathery_dev.table_name);
 
-        let loaded = from_env.or(from_dev_env).unwrap();
-        println!("TABLE_NAME: {}", loaded);
-        loaded
+        from_env.or(from_dev_env).unwrap()
     }
 }
 

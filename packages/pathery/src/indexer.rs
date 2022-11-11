@@ -12,8 +12,8 @@ pub struct Indexer {
 }
 
 impl Indexer {
-    pub fn create() -> Result<Indexer> {
-        let directory = IndexerDirectory::create("test");
+    pub fn create(index_id: &str) -> Result<Indexer> {
+        let directory = IndexerDirectory::create(index_id);
         let mut schema = Schema::builder();
 
         schema.add_text_field("title", TEXT | STORED);
