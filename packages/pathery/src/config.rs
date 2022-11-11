@@ -1,7 +1,7 @@
 use config::Config;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct CDKOutputs {
+struct CDKOutputs {
     #[serde(rename = "pathery-dev")]
     pathery_dev: PatheryDevOutputs,
 }
@@ -12,6 +12,7 @@ struct PatheryDevOutputs {
     table_name: String,
 }
 
+#[derive(Clone)]
 pub struct AppConfig {
     dev_env_outputs: Option<CDKOutputs>,
 }
