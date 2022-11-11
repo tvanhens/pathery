@@ -7,7 +7,8 @@
     "deploy": "cdk deploy -O cdk-outputs.json --require-approval never --method direct"
   },
   "dependencies": {
-    "@internal/handler-post-index": "workspace:*"
+    "@internal/handler-post-index": "workspace:*",
+    "@internal/handler-query-index": "workspace:*"
   },
   "keywords": [],
   "author": "",

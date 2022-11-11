@@ -25,16 +25,27 @@ importers:
   app:
     specifiers:
       '@internal/handler-post-index': workspace:*
+      '@internal/handler-query-index': workspace:*
     dependencies:
       '@internal/handler-post-index': link:../handlers/post-index
+      '@internal/handler-query-index': link:../handlers/query-index
 
   dev-env:
     specifiers: {}
 
   handlers/post-index:
-    specifiers: {}
+    specifiers:
+      '@internal/pathery-core': workspace:*
+    dependencies:
+      '@internal/pathery-core': link:../../packages/pathery
 
-  packages/pathery-core:
+  handlers/query-index:
+    specifiers:
+      '@internal/pathery-core': workspace:*
+    dependencies:
+      '@internal/pathery-core': link:../../packages/pathery
+
+  packages/pathery:
     specifiers:
       '@internal/dev-env': workspace:*
     dependencies:

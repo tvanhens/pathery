@@ -17,7 +17,7 @@ class RustFunction extends Function {
   }
 }
 
-export class AppStack extends Stack {
+export class PatheryStack extends Stack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
@@ -37,6 +37,10 @@ export class AppStack extends Stack {
     table.grantReadWriteData(postIndex);
     postIndex.addEnvironment("TABLE_NAME", table.tableName);
 
+    const queryIndex = new RustFunction(this, "query-index");
+    table.grantReadData(queryIndex);
+    queryIndex.addEnvironment("TABLE_NAME", table.tableName);
+
     const api = new RestApi(this, "PatheryApi");
 
     const indexRoute = api.root.addResource("index");
@@ -44,5 +48,9 @@ export class AppStack extends Stack {
     const indexSingleRoute = indexRoute.addResource("{index_id}");
 
     indexSingleRoute.addMethod("POST", new LambdaIntegration(postIndex));
+
+    const queryActionRoute = indexSingleRoute.addResource("query");
+
+    queryActionRoute.addMethod("POST", new LambdaIntegration(queryIndex));
   }
 }

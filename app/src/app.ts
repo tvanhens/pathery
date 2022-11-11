@@ -1,6 +1,6 @@
 import { App } from "aws-cdk-lib";
-import { AppStack } from "./app-stack";
+import { PatheryStack } from "./pathery-stack";
 
 const app = new App();
 
-new AppStack(app, "app-dev");
+new PatheryStack(app, "pathery-dev");

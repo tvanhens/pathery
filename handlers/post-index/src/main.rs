@@ -9,7 +9,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
         Handle::current()
             .spawn_blocking(move || {
                 let index_id = path_params.first("index_id").unwrap();
-                println!("index-id: {}", index_id);
+
                 let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
 
                 let mut indexer = Indexer::create(index_id).unwrap();
