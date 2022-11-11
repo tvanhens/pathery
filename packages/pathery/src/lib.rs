@@ -1,5 +1,6 @@
 pub mod config;
 pub mod directory;
+pub mod index_loader;
 pub mod indexer;
 pub mod searcher;
 
@@ -17,12 +18,13 @@ mod test {
         Index,
     };
 
-    use crate::{indexer::Indexer, searcher::Searcher};
+    use crate::{index_loader::IndexLoader, indexer::Indexer, searcher::Searcher};
 
     #[test]
     fn write_sample_doc_to_indexer_and_query() -> Result<()> {
-        let index_id = uuid::Uuid::new_v4().to_string();
-        let mut indexer = Indexer::create(&index_id)?;
+        let loader = IndexLoader::create("../../app/config/pathery-config")?;
+        let index_id = format!("book-index-{}", uuid::Uuid::new_v4().to_string());
+        let mut indexer = Indexer::create(&loader, &index_id)?;
 
         indexer.index_doc(json!({
             "title": "The Old Man and the Sea",
@@ -31,7 +33,7 @@ mod test {
                     now without taking a fish."
         }))?;
 
-        let searcher = Searcher::create(&index_id)?;
+        let searcher = Searcher::create(&loader, &index_id)?;
 
         let results = searcher.search("Gulf")?;
 

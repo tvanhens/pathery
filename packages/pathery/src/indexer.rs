@@ -1,25 +1,17 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
-use tantivy::{
-    schema::{Field, Schema, STORED, TEXT},
-    Document, Index, IndexWriter,
-};
+use tantivy::{schema::Field, Document, Index, IndexWriter};
 
-use crate::directory::IndexerDirectory;
+use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
 
 pub struct Indexer {
     writer: IndexWriter,
 }
 
 impl Indexer {
-    pub fn create(index_id: &str) -> Result<Indexer> {
+    pub fn create(index_loader: &IndexLoader, index_id: &str) -> Result<Indexer> {
         let directory = IndexerDirectory::create(index_id);
-        let mut schema = Schema::builder();
-
-        schema.add_text_field("title", TEXT | STORED);
-        schema.add_text_field("body", TEXT);
-
-        let index = Index::open_or_create(directory, schema.build())?;
+        let index = Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
 
         Ok(Indexer {
             writer: index.writer(100_000_000)?,

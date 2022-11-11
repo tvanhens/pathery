@@ -1,5 +1,5 @@
 use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
-use pathery::searcher::Searcher;
+use pathery::{index_loader::IndexLoader, searcher::Searcher};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 
@@ -23,7 +23,7 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
 
                 let value = serde_json::from_str::<QueryRequest>(&body_safe).unwrap();
 
-                let searcher = Searcher::create(index_id).unwrap();
+                let searcher = Searcher::create(&IndexLoader::lambda().unwrap(), index_id).unwrap();
 
                 let result = searcher.search(&value.query).unwrap();
 

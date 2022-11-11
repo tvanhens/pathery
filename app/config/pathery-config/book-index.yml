@@ -1,0 +1,9 @@
+# Indexes with this prefix will automatically get created
+# with the config in this file.
+prefix: book-index-
+fields:
+  - name: title
+    kind: !Text { options: [TEXT, STORED] }
+
+  - name: body
+    kind: !Text { options: [TEXT] }

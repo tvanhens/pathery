@@ -1,6 +1,7 @@
 import { Stack } from "aws-cdk-lib";
 import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
+import { LayerVersion } from "aws-cdk-lib/aws-lambda";
 import { Architecture, Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
@@ -33,13 +34,21 @@ export class PatheryStack extends Stack {
       },
     });
 
+    let configLayer = new LayerVersion(this, "config-layer", {
+      code: Code.fromAsset("config"),
+      compatibleArchitectures: [Architecture.ARM_64],
+      compatibleRuntimes: [Runtime.PROVIDED_AL2],
+    });
+
     const postIndex = new RustFunction(this, "post-index");
     table.grantReadWriteData(postIndex);
     postIndex.addEnvironment("TABLE_NAME", table.tableName);
+    postIndex.addLayers(configLayer);
 
     const queryIndex = new RustFunction(this, "query-index");
     table.grantReadData(queryIndex);
     queryIndex.addEnvironment("TABLE_NAME", table.tableName);
+    queryIndex.addLayers(configLayer);
 
     const api = new RestApi(this, "PatheryApi");
 

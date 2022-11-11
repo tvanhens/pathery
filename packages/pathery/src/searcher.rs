@@ -1,26 +1,16 @@
 use anyhow::Result;
-use tantivy::{
-    collector::TopDocs,
-    query::QueryParser,
-    schema::{Field, Schema, STORED, TEXT},
-    DocAddress, Index, Score,
-};
+use tantivy::{collector::TopDocs, query::QueryParser, schema::Field, DocAddress, Index, Score};
 
-use crate::directory::IndexerDirectory;
+use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
 
 pub struct Searcher {
     index: Index,
 }
 
 impl Searcher {
-    pub fn create(index_id: &str) -> Result<Searcher> {
+    pub fn create(index_loader: &IndexLoader, index_id: &str) -> Result<Searcher> {
         let directory = IndexerDirectory::create(index_id);
-        let mut schema = Schema::builder();
-
-        schema.add_text_field("title", TEXT | STORED);
-        schema.add_text_field("body", TEXT);
-
-        let index = Index::open_or_create(directory, schema.build())?;
+        let index = Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
 
         Ok(Searcher { index })
     }

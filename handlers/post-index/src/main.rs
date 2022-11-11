@@ -1,5 +1,5 @@
 use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
-use pathery::indexer::Indexer;
+use pathery::{index_loader::IndexLoader, indexer::Indexer};
 use tokio::runtime::Handle;
 
 async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
@@ -12,7 +12,8 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
 
                 let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
 
-                let mut indexer = Indexer::create(index_id).unwrap();
+                let mut indexer =
+                    Indexer::create(&IndexLoader::lambda().unwrap(), index_id).unwrap();
 
                 indexer.index_doc(value).unwrap();
             })
