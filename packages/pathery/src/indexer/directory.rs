@@ -8,6 +8,8 @@ use tantivy::{
     Directory,
 };
 
+use crate::config::AppConfig;
+
 use super::filestore::{DynamoFileStore, FileStore};
 
 #[derive(Clone, Debug)]
@@ -20,8 +22,8 @@ pub struct IndexerDirectory {
 
 impl IndexerDirectory {
     pub fn create(store_id: &str) -> IndexerDirectory {
-        let table_name = std::env::var("TABLE_NAME").unwrap();
-        let store = Arc::new(DynamoFileStore::create(&table_name, store_id));
+        let config = AppConfig::load();
+        let store = Arc::new(DynamoFileStore::create(&config.table_name(), store_id));
         let stored_files = Arc::new(Mutex::new(store.list_files().unwrap()));
 
         IndexerDirectory {

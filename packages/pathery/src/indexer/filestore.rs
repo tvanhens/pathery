@@ -123,16 +123,20 @@ impl FileStore for DynamoFileStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::AppConfig;
+
     use super::*;
     use uuid::Uuid;
 
+    fn test_store() -> DynamoFileStore {
+        let config = AppConfig::load();
+        let store_id = Uuid::new_v4();
+        DynamoFileStore::create(&config.table_name(), &store_id.to_string())
+    }
+
     #[test]
     fn write_and_read_file() -> Result<()> {
-        let store_id = Uuid::new_v4();
-        let store = DynamoFileStore::create(
-            "pathery-dev-TestTable5769773A-CC2G78O275F1",
-            &store_id.to_string(),
-        );
+        let store = test_store();
         let content = "hello world!".as_bytes().to_vec();
 
         store.write_file("hello.txt", &content)?;

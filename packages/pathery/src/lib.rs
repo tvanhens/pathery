@@ -1,7 +1,8 @@
+pub mod config;
 pub mod indexer;
 
 #[cfg(test)]
-mod tests {
+mod test {
     use anyhow::Result;
     use serde_json::json;
 
