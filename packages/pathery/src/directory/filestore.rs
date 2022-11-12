@@ -18,7 +18,7 @@ fn format_file_content_pk(store_id: &str, path: &str) -> AttributeValue {
 pub trait FileStore {
     fn delete(&self, path: &str) -> Result<()>;
     fn exists(&self, path: &str) -> Result<bool>;
-    fn write_file(&self, path: &str, content: &Vec<u8>) -> Result<()>;
+    fn write_file(&self, path: &str, content: &[u8]) -> Result<()>;
     fn list_files(&self) -> Result<Vec<String>>;
     fn get_content(&self, path: &str) -> Result<Vec<u8>>;
 }
@@ -43,14 +43,14 @@ impl DynamoFileStore {
         DynamoFileStore {
             table_name: table_name.to_string(),
             store_id: store_id.to_string(),
-            client: Arc::new(client.to_owned()),
+            client: Arc::new(client),
             rt,
         }
     }
 }
 
 impl FileStore for DynamoFileStore {
-    fn write_file(&self, path: &str, content: &Vec<u8>) -> Result<()> {
+    fn write_file(&self, path: &str, content: &[u8]) -> Result<()> {
         let header_item = Put::builder()
             .table_name(&self.table_name)
             .item("pk", format_file_header_pk(&self.store_id))
@@ -62,8 +62,8 @@ impl FileStore for DynamoFileStore {
         let content_item_key = format_file_content_pk(&self.store_id, path);
         let content_item = Put::builder()
             .table_name(&self.table_name)
-            .item("pk", content_item_key.to_owned())
-            .item("sk", content_item_key.to_owned())
+            .item("pk", content_item_key.clone())
+            .item("sk", content_item_key)
             .item("store_id", AttributeValue::S(self.store_id.to_string()))
             .item("content", AttributeValue::B(Blob::new(content.to_owned())))
             .build();
@@ -124,8 +124,8 @@ impl FileStore for DynamoFileStore {
             self.client
                 .get_item()
                 .table_name(&self.table_name)
-                .key("pk", key.to_owned())
-                .key("sk", key.to_owned())
+                .key("pk", key.clone())
+                .key("sk", key)
                 .send(),
         )?;
 

@@ -21,12 +21,17 @@ impl Indexer {
     pub fn index_doc(&mut self, raw_doc: serde_json::Value) -> Result<()> {
         let mut index_doc = Document::new();
 
-        let doc_obj = raw_doc.as_object().ok_or(anyhow!("Expected JSON object"))?;
+        let doc_obj = raw_doc
+            .as_object()
+            .ok_or_else(|| anyhow!("Expected JSON object"))?;
 
         for (key, value) in doc_obj {
             let field = self.get_field(key)?;
             match value {
-                Value::String(v) => Ok(index_doc.add_text(field, v)),
+                Value::String(v) => {
+                    index_doc.add_text(field, v);
+                    Ok(())
+                }
                 _ => Err(anyhow!("Unrecognized value: {:?}", value)),
             }?;
         }
@@ -42,7 +47,7 @@ impl Indexer {
         let schema = self.writer.index().schema();
         let field = schema
             .get_field(name)
-            .ok_or(anyhow!("Field does not exist: {}", name))?;
+            .ok_or_else(|| anyhow!("Field does not exist: {name}"))?;
         Ok(field)
     }
 }

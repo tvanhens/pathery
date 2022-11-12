@@ -4,24 +4,24 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tantivy::schema::{self, Schema, TextOptions};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum TextFieldOption {
     STORED,
     TEXT,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum FieldKindConfig {
     Text { options: Vec<TextFieldOption> },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FieldConfig {
     name: String,
     kind: FieldKindConfig,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct IndexConfig {
     prefix: String,
     fields: Vec<FieldConfig>,

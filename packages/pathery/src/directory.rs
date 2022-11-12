@@ -19,10 +19,10 @@ struct StoreWriter {
 }
 
 impl StoreWriter {
-    fn new(store: Arc<DynamoFileStore>, path: &str) -> StoreWriter {
+    fn new(store: &Arc<DynamoFileStore>, path: &str) -> StoreWriter {
         StoreWriter {
             data: Cursor::new(Vec::new()),
-            store,
+            store: store.clone(),
             path: path.to_string(),
         }
     }
@@ -69,7 +69,7 @@ impl IndexerDirectory {
     }
 }
 
-impl<'a> Directory for IndexerDirectory {
+impl Directory for IndexerDirectory {
     fn get_file_handle(
         &self,
         path: &std::path::Path,
@@ -96,7 +96,7 @@ impl<'a> Directory for IndexerDirectory {
         path: &std::path::Path,
     ) -> Result<tantivy::directory::WritePtr, tantivy::directory::error::OpenWriteError> {
         Ok(BufWriter::new(Box::new(StoreWriter::new(
-            self.store.clone(),
+            &self.store,
             path.to_str().unwrap(),
         ))))
     }
@@ -116,9 +116,7 @@ impl<'a> Directory for IndexerDirectory {
     }
 
     fn atomic_write(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
-        self.store
-            .write_file(path.to_str().unwrap(), &data.to_vec())
-            .unwrap();
+        self.store.write_file(path.to_str().unwrap(), data).unwrap();
         Ok(())
     }
 
