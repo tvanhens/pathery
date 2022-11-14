@@ -16,26 +16,15 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     if let Body::Text(body) = event.body() {
         let body_safe = body.to_string();
         let path_params = event.path_parameters();
-
-        let index_id = path_params.first("index_id").unwrap();
-
-        let value = serde_json::from_str::<QueryRequest>(&body_safe).unwrap();
-
+        let index_id = path_params.first("index_id").expect("index_id not found");
+        let value = serde_json::from_str::<QueryRequest>(&body_safe)?;
         let client = lambda::ddb_client().await;
-
-        let searcher =
-            Searcher::create(&client, &IndexLoader::lambda().unwrap(), index_id).unwrap();
-
-        let result = searcher.search(&value.query).unwrap();
-
+        let searcher = Searcher::create(&client, &IndexLoader::lambda()?, index_id)?;
+        let result = searcher.search(&value.query)?;
         let resp = Response::builder()
             .status(200)
-            .header("content-type", "text/html")
-            .body(
-                serde_json::to_string(&QueryResponse { results: result })
-                    .unwrap()
-                    .into(),
-            )
+            .header("content-type", "application/json")
+            .body(serde_json::to_string(&result)?.into())
             .map_err(Box::new)?;
         Ok(resp)
     } else {

@@ -1,10 +1,29 @@
 use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
 use anyhow::Result;
 use aws_sdk_dynamodb::Client as DDBClient;
+use serde::Serialize;
+use serde_json::Map;
 use std::sync::Arc;
 use tantivy::{
     collector::TopDocs, query::QueryParser, schema::Field, DocAddress, Index, IndexReader, Score,
 };
+
+#[derive(Serialize)]
+pub struct SearchHit {
+    doc: serde_json::Value,
+    score: f32,
+}
+
+#[derive(Serialize)]
+pub struct SearchResults {
+    matches: Vec<SearchHit>,
+}
+
+impl SearchResults {
+    pub fn matches(&self) -> &Vec<SearchHit> {
+        &self.matches
+    }
+}
 
 pub struct Searcher {
     index: Index,
@@ -28,7 +47,7 @@ impl Searcher {
         })
     }
 
-    pub fn search(&self, query: &str) -> Result<Vec<String>> {
+    pub fn search(&self, query: &str) -> Result<SearchResults> {
         let searcher = self.reader.searcher();
 
         let schema = self.index.schema();
@@ -46,11 +65,27 @@ impl Searcher {
         let top_docs: Vec<(Score, DocAddress)> =
             searcher.search(&query, &TopDocs::with_limit(10))?;
 
-        let result: Result<Vec<String>, _> = top_docs
+        let matches: Result<Vec<SearchHit>, _> = top_docs
             .into_iter()
-            .map(|(_score, address)| searcher.doc(address).map(|doc| schema.to_json(&doc)))
+            .map(|(score, address)| -> Result<SearchHit> {
+                let search_doc = searcher.doc(address)?;
+                let mut doc_map = Map::new();
+
+                for (field, entry) in self.index.schema().fields() {
+                    let field_name = entry.name();
+                    if let Some(value) = search_doc.get_first(field) {
+                        let value = serde_json::to_value(value)?;
+                        doc_map.insert(field_name.to_string(), value);
+                    }
+                }
+
+                Ok(SearchHit {
+                    score,
+                    doc: doc_map.into(),
+                })
+            })
             .collect();
 
-        Ok(result.unwrap())
+        Ok(SearchResults { matches: matches? })
     }
 }

@@ -40,7 +40,7 @@ mod test {
 
         let results = searcher.search("Gulf")?;
 
-        assert_eq!(1, results.len());
+        assert_eq!(1, results.matches().len());
 
         Ok(())
     }
