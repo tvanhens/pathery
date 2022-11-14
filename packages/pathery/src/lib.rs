@@ -27,13 +27,14 @@ mod test {
         let client = lambda::ddb_client().await;
 
         let mut indexer = Indexer::create(&client, &loader, &index_id)?;
-
-        indexer.index_doc(json!({
+        let mut doc = json!({
             "title": "The Old Man and the Sea",
             "body": "He was an old man who fished alone in a skiff in \
                     the Gulf Stream and he had gone eighty-four days \
                     now without taking a fish."
-        }))?;
+        });
+
+        indexer.index_doc(&mut doc)?;
 
         let searcher = Searcher::create(&client, &loader, &index_id)?;
 

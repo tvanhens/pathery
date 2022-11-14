@@ -8,14 +8,17 @@ use serde_json::{json, Value};
 
 #[derive(Serialize)]
 struct PostIndexResponse {
+    #[serde(rename = "__id")]
+    doc_id: String,
     updated_at: String,
 }
 
 impl PostIndexResponse {
-    fn new() -> PostIndexResponse {
+    fn new(doc_id: &str) -> PostIndexResponse {
         let now = SystemTime::now();
         let now: DateTime<Utc> = now.into();
         PostIndexResponse {
+            doc_id: doc_id.to_string(),
             updated_at: now.to_rfc3339(),
         }
     }
@@ -50,9 +53,9 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
 
     let mut indexer = Indexer::create(&client, &IndexLoader::lambda().unwrap(), &index_id)?;
 
-    indexer.index_doc(payload)?;
+    let doc_id = indexer.index_doc(&payload)?;
 
-    Ok(serde_json::to_value(PostIndexResponse::new())?
+    Ok(serde_json::to_value(PostIndexResponse::new(&doc_id))?
         .into_response()
         .await)
 }

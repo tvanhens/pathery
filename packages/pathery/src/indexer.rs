@@ -2,9 +2,14 @@ use anyhow::{anyhow, Result};
 use aws_sdk_dynamodb::Client as DDBClient;
 use serde_json::Value;
 use std::sync::Arc;
-use tantivy::{schema::Field, Document, Index, IndexWriter};
+use tantivy::{schema::Field, Document, Index, IndexWriter, Term};
 
 use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
+
+fn generate_id() -> String {
+    let id = uuid::Uuid::new_v4();
+    id.to_string()
+}
 
 pub struct Indexer {
     writer: IndexWriter,
@@ -28,14 +33,23 @@ impl Indexer {
         })
     }
 
-    pub fn index_doc(&mut self, raw_doc: serde_json::Value) -> Result<()> {
-        let mut index_doc = Document::new();
-
-        let doc_obj = raw_doc
-            .as_object()
+    pub fn index_doc(&mut self, raw_doc: &serde_json::Value) -> Result<String> {
+        let mut doc_obj = raw_doc.clone();
+        let doc_obj = doc_obj
+            .as_object_mut()
             .ok_or_else(|| anyhow!("Expected JSON object"))?;
 
-        for (key, value) in doc_obj {
+        let id = doc_obj
+            .remove("__id")
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_else(|| generate_id());
+
+        let id_field = self.get_field("__id")?;
+        let mut index_doc = Document::new();
+
+        index_doc.add_text(id_field, &id);
+
+        for (key, value) in doc_obj.iter() {
             let field = self.get_field(key)?;
             match value {
                 Value::String(v) => {
@@ -46,11 +60,13 @@ impl Indexer {
             }?;
         }
 
+        self.writer
+            .delete_term(Term::from_field_text(id_field, &id));
         self.writer.add_document(index_doc)?;
 
         self.writer.commit()?;
 
-        Ok(())
+        Ok(id)
     }
 
     fn get_field(&self, name: &str) -> Result<Field> {

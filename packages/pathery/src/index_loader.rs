@@ -74,6 +74,11 @@ impl IndexLoader {
                     }
                 }
 
+                // Add system schema fields
+
+                // __id is the document id used for uniqueness
+                schema.add_text_field("__id", schema::STRING | schema::STORED);
+
                 schema.build()
             })
     }
