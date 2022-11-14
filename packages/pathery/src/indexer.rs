@@ -19,10 +19,8 @@ impl Indexer {
         tokio::task::block_in_place(|| {
             let directory = IndexerDirectory::create(client, index_id);
 
-            println!("BEFORE_INDEX");
             let index =
                 Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
-            println!("AFTER_INDEX");
 
             Ok(Indexer {
                 writer: index.writer(100_000_000)?,

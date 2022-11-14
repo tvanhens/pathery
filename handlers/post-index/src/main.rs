@@ -1,29 +1,60 @@
-use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
+use std::time::SystemTime;
+
+use chrono::{DateTime, Utc};
+use lambda_http::{run, service_fn, Body, Error, IntoResponse, Request, RequestExt, Response};
 use pathery::{index_loader::IndexLoader, indexer::Indexer, lambda};
+use serde::Serialize;
+use serde_json::{json, Value};
+
+#[derive(Serialize)]
+struct PostIndexResponse {
+    updated_at: String,
+}
+
+impl PostIndexResponse {
+    fn new() -> PostIndexResponse {
+        let now = SystemTime::now();
+        let now: DateTime<Utc> = now.into();
+        PostIndexResponse {
+            updated_at: now.to_rfc3339(),
+        }
+    }
+}
 
 async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
-    if let Body::Text(body) = event.body() {
-        let body_safe = body.to_string();
-        let path_params = event.path_parameters();
+    let index_id = {
+        let params = event.path_parameters();
+        if let Some(index_id) = params.first("index_id") {
+            index_id.to_string()
+        } else {
+            return Ok(json!({
+                "message": "Missing path_param index_id"
+            })
+            .into_response()
+            .await);
+        }
+    };
 
-        let index_id = path_params.first("index_id").unwrap();
+    let payload = match event.payload::<Value>() {
+        Ok(Some(value)) => value,
+        _ => {
+            return Ok(json!({
+                "message": "Invalid body payload"
+            })
+            .into_response()
+            .await);
+        }
+    };
 
-        let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
+    let client = lambda::ddb_client().await;
 
-        let client = lambda::ddb_client().await;
+    let mut indexer = Indexer::create(&client, &IndexLoader::lambda().unwrap(), &index_id)?;
 
-        let mut indexer =
-            Indexer::create(&client, &IndexLoader::lambda().unwrap(), index_id).unwrap();
+    indexer.index_doc(payload)?;
 
-        indexer.index_doc(value).unwrap();
-    }
-
-    let resp = Response::builder()
-        .status(200)
-        .header("content-type", "text/html")
-        .body("Success".into())
-        .map_err(Box::new)?;
-    Ok(resp)
+    Ok(serde_json::to_value(PostIndexResponse::new())?
+        .into_response()
+        .await)
 }
 
 #[tokio::main]
