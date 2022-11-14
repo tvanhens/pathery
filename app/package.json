@@ -1,15 +1,14 @@
 {
   "name": "app",
-  "version": "1.0.0",
+  "private": true,
+  "version": "0.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "deploy": "cdk deploy -O cdk-outputs.json --require-approval never --method direct"
   },
   "dependencies": {
-    "@internal/handler-post-index": "workspace:*",
-    "@internal/handler-query-index": "workspace:*",
-    "@internal/handler-delete-doc": "workspace:*"
+    "@pathery/cdk": "workspace:*"
   },
   "keywords": [],
   "author": "",

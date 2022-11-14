@@ -1,5 +1,5 @@
 import { App } from "aws-cdk-lib";
-import { PatheryStack } from "./pathery-stack";
+import { PatheryStack } from "@pathery/cdk";
 
 const app = new App();
 

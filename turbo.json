@@ -9,18 +9,14 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "build:lambda": {
-      "dependsOn": ["^build"],
-      "outputs": ["target/"]
+      "outputs": ["target", "lib"]
     },
     "synth": {
-      "dependsOn": ["^build:lambda"],
+      "dependsOn": ["^build"],
       "outputs": ["cdk.out"]
     },
     "deploy": {
-      "dependsOn": ["^build:lambda"],
+      "dependsOn": ["^build"],
       "outputs": ["cdk.out"]
     }
   }

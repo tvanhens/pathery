@@ -1,9 +1,10 @@
 {
   "name": "@internal/handler-query-index",
-  "version": "1.0.0",
+  "private": true,
+  "version": "0.0.0",
   "description": "",
   "scripts": {
-    "build:lambda": "cargo lambda build --release --arm64 -l target/lambda"
+    "build": "cargo lambda build --release --arm64 -l target/lambda"
   },
   "dependencies": {
     "@internal/pathery-core": "workspace:*"
