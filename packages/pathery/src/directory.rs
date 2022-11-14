@@ -1,6 +1,7 @@
 pub mod filestore;
 
 use crate::config::AppConfig;
+use aws_sdk_dynamodb::Client as DDBClient;
 use filestore::{DynamoFileStore, FileStore};
 use std::{
     io::{self, BufWriter, Cursor, Seek, SeekFrom, Write},
@@ -61,9 +62,13 @@ pub struct IndexerDirectory {
 }
 
 impl IndexerDirectory {
-    pub fn create(store_id: &str) -> IndexerDirectory {
+    pub fn create(client: &Arc<DDBClient>, store_id: &str) -> IndexerDirectory {
         let config = AppConfig::load();
-        let store = Arc::new(DynamoFileStore::create(&config.table_name(), store_id));
+        let store = Arc::new(DynamoFileStore::create(
+            client,
+            &config.table_name(),
+            store_id,
+        ));
 
         IndexerDirectory { store }
     }

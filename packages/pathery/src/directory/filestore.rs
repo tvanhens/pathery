@@ -4,8 +4,9 @@ use anyhow::Result;
 use aws_sdk_dynamodb::{
     model::{AttributeValue, Put, TransactWriteItem},
     types::Blob,
+    Client as DDBClient,
 };
-use tokio::runtime::Runtime;
+use tokio::runtime::Handle;
 
 fn format_file_header_pk(store_id: &str) -> AttributeValue {
     AttributeValue::S(format!("store|{}|file_header", store_id))
@@ -27,24 +28,19 @@ pub trait FileStore {
 pub struct DynamoFileStore {
     table_name: String,
     store_id: String,
-    client: Arc<aws_sdk_dynamodb::Client>,
-    rt: Runtime,
+    client: Arc<DDBClient>,
+    handle: Handle,
 }
 
 impl DynamoFileStore {
-    pub fn create(table_name: &str, store_id: &str) -> DynamoFileStore {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let config = rt.block_on(aws_config::load_from_env());
-        let client = aws_sdk_dynamodb::Client::new(&config);
+    pub fn create(client: &Arc<DDBClient>, table_name: &str, store_id: &str) -> DynamoFileStore {
+        let handle = Handle::try_current().expect("Tokio runtime should be present but not found.");
 
         DynamoFileStore {
             table_name: table_name.to_string(),
             store_id: store_id.to_string(),
-            client: Arc::new(client),
-            rt,
+            client: Arc::clone(client),
+            handle,
         }
     }
 }
@@ -68,7 +64,7 @@ impl FileStore for DynamoFileStore {
             .item("content", AttributeValue::B(Blob::new(content.to_owned())))
             .build();
 
-        self.rt.block_on(
+        self.handle.block_on(
             self.client
                 .transact_write_items()
                 .transact_items(TransactWriteItem::builder().put(header_item).build())
@@ -81,7 +77,7 @@ impl FileStore for DynamoFileStore {
 
     fn exists(&self, path: &str) -> Result<bool> {
         match self
-            .rt
+            .handle
             .block_on(
                 self.client
                     .get_item()
@@ -100,7 +96,7 @@ impl FileStore for DynamoFileStore {
     }
 
     fn list_files(&self) -> Result<Vec<String>> {
-        let response = self.rt.block_on(
+        let response = self.handle.block_on(
             self.client
                 .query()
                 .table_name(&self.table_name)
@@ -120,7 +116,7 @@ impl FileStore for DynamoFileStore {
 
     fn get_content(&self, path: &str) -> Result<Vec<u8>> {
         let key = format_file_content_pk(&self.store_id, path);
-        let response = self.rt.block_on(
+        let response = self.handle.block_on(
             self.client
                 .get_item()
                 .table_name(&self.table_name)
@@ -143,7 +139,7 @@ impl FileStore for DynamoFileStore {
     }
 
     fn delete(&self, path: &str) -> Result<()> {
-        self.rt.block_on(
+        self.handle.block_on(
             self.client
                 .delete_item()
                 .table_name(&self.table_name)
@@ -160,38 +156,46 @@ mod tests {
     use crate::config::AppConfig;
 
     use super::*;
+    use tokio::task;
     use uuid::Uuid;
 
-    fn test_store() -> DynamoFileStore {
+    async fn test_store() -> DynamoFileStore {
+        std::env::set_var("AWS_PROFILE", "pathery-dev");
+        let sdk_config = aws_config::load_from_env().await;
+        let client = Arc::new(DDBClient::new(&sdk_config));
         let config = AppConfig::load();
         let store_id = Uuid::new_v4();
-        DynamoFileStore::create(&config.table_name(), &store_id.to_string())
+        DynamoFileStore::create(&client, &config.table_name(), &store_id.to_string())
     }
 
-    #[test]
-    fn write_and_read_file() -> Result<()> {
-        let store = test_store();
+    #[tokio::test]
+    async fn write_and_read_file() -> Result<()> {
+        let store = test_store().await;
 
-        assert_eq!(false, store.exists("hello.txt")?);
+        task::spawn_blocking(move || {
+            assert_eq!(false, store.exists("hello.txt")?);
 
-        let content = "hello world!".as_bytes().to_vec();
+            let content = "hello world!".as_bytes().to_vec();
 
-        store.write_file("hello.txt", &content)?;
+            store.write_file("hello.txt", &content)?;
 
-        assert_eq!(true, store.exists("hello.txt")?);
+            assert_eq!(true, store.exists("hello.txt")?);
 
-        let files = store.list_files()?;
+            let files = store.list_files()?;
 
-        assert_eq!(vec!["hello.txt"], files);
+            assert_eq!(vec!["hello.txt"], files);
 
-        let read_content = store.get_content(files.get(0).unwrap())?;
+            let read_content = store.get_content(files.get(0).unwrap())?;
 
-        assert_eq!(content, read_content);
+            assert_eq!(content, read_content);
 
-        store.delete("hello.txt")?;
+            store.delete("hello.txt")?;
 
-        assert_eq!(false, store.exists("hello.txt")?);
+            assert_eq!(false, store.exists("hello.txt")?);
 
-        Ok(())
+            Ok(())
+        })
+        .await
+        .unwrap()
     }
 }

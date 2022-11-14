@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
+use aws_sdk_dynamodb::Client as DDBClient;
 use serde_json::Value;
+use std::sync::Arc;
 use tantivy::{schema::Field, Document, Index, IndexWriter};
 
 use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
@@ -9,12 +11,22 @@ pub struct Indexer {
 }
 
 impl Indexer {
-    pub fn create(index_loader: &IndexLoader, index_id: &str) -> Result<Indexer> {
-        let directory = IndexerDirectory::create(index_id);
-        let index = Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
+    pub fn create(
+        client: &Arc<DDBClient>,
+        index_loader: &IndexLoader,
+        index_id: &str,
+    ) -> Result<Indexer> {
+        tokio::task::block_in_place(|| {
+            let directory = IndexerDirectory::create(client, index_id);
 
-        Ok(Indexer {
-            writer: index.writer(100_000_000)?,
+            println!("BEFORE_INDEX");
+            let index =
+                Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
+            println!("AFTER_INDEX");
+
+            Ok(Indexer {
+                writer: index.writer(100_000_000)?,
+            })
         })
     }
 

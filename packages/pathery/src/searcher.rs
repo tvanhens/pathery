@@ -1,23 +1,35 @@
-use anyhow::Result;
-use tantivy::{collector::TopDocs, query::QueryParser, schema::Field, DocAddress, Index, Score};
-
 use crate::{directory::IndexerDirectory, index_loader::IndexLoader};
+use anyhow::Result;
+use aws_sdk_dynamodb::Client as DDBClient;
+use std::sync::Arc;
+use tantivy::{
+    collector::TopDocs, query::QueryParser, schema::Field, DocAddress, Index, IndexReader, Score,
+};
 
 pub struct Searcher {
     index: Index,
+    reader: IndexReader,
 }
 
 impl Searcher {
-    pub fn create(index_loader: &IndexLoader, index_id: &str) -> Result<Searcher> {
-        let directory = IndexerDirectory::create(index_id);
-        let index = Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
+    pub fn create(
+        client: &Arc<DDBClient>,
+        index_loader: &IndexLoader,
+        index_id: &str,
+    ) -> Result<Searcher> {
+        tokio::task::block_in_place(|| {
+            let directory = IndexerDirectory::create(client, index_id);
+            let index =
+                Index::open_or_create(directory, index_loader.schema_for(index_id).unwrap())?;
 
-        Ok(Searcher { index })
+            let reader = index.reader()?;
+
+            Ok(Searcher { index, reader })
+        })
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<String>> {
-        let reader = self.index.reader()?;
-        let searcher = reader.searcher();
+        let searcher = self.reader.searcher();
 
         let schema = self.index.schema();
 

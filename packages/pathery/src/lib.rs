@@ -2,6 +2,7 @@ pub mod config;
 pub mod directory;
 pub mod index_loader;
 pub mod indexer;
+pub mod lambda;
 pub mod searcher;
 
 #[cfg(test)]
@@ -9,6 +10,7 @@ mod test {
 
     use std::vec;
 
+    use crate::{index_loader::IndexLoader, indexer::Indexer, lambda, searcher::Searcher};
     use anyhow::Result;
     use serde_json::json;
     use tantivy::{
@@ -18,13 +20,13 @@ mod test {
         Index,
     };
 
-    use crate::{index_loader::IndexLoader, indexer::Indexer, searcher::Searcher};
-
-    #[test]
-    fn write_sample_doc_to_indexer_and_query() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn write_sample_doc_to_indexer_and_query() -> Result<()> {
         let loader = IndexLoader::create("../../app/config/pathery-config")?;
         let index_id = format!("book-index-{}", uuid::Uuid::new_v4().to_string());
-        let mut indexer = Indexer::create(&loader, &index_id)?;
+        let client = lambda::ddb_client().await;
+
+        let mut indexer = Indexer::create(&client, &loader, &index_id)?;
 
         indexer.index_doc(json!({
             "title": "The Old Man and the Sea",
@@ -33,7 +35,7 @@ mod test {
                     now without taking a fish."
         }))?;
 
-        let searcher = Searcher::create(&loader, &index_id)?;
+        let searcher = Searcher::create(&client, &loader, &index_id)?;
 
         let results = searcher.search("Gulf")?;
 

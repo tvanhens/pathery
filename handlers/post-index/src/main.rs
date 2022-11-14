@@ -1,24 +1,21 @@
 use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
-use pathery::{index_loader::IndexLoader, indexer::Indexer};
-use tokio::runtime::Handle;
+use pathery::{index_loader::IndexLoader, indexer::Indexer, lambda};
 
 async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
     if let Body::Text(body) = event.body() {
         let body_safe = body.to_string();
         let path_params = event.path_parameters();
-        Handle::current()
-            .spawn_blocking(move || {
-                let index_id = path_params.first("index_id").unwrap();
 
-                let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
+        let index_id = path_params.first("index_id").unwrap();
 
-                let mut indexer =
-                    Indexer::create(&IndexLoader::lambda().unwrap(), index_id).unwrap();
+        let value = serde_json::from_str::<serde_json::Value>(&body_safe).unwrap();
 
-                indexer.index_doc(value).unwrap();
-            })
-            .await
-            .unwrap();
+        let client = lambda::ddb_client().await;
+
+        let mut indexer =
+            Indexer::create(&client, &IndexLoader::lambda().unwrap(), index_id).unwrap();
+
+        indexer.index_doc(value).unwrap();
     }
 
     let resp = Response::builder()
