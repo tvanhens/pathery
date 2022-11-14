@@ -14,7 +14,7 @@ https://<api-id>.execute-api.us-east-1.amazonaws.com/prod
 
 ### Index a Document
 
-`POST /index/{index_name}`
+`POST /index/{index_id}`
 
 Indexes a document so that the document is searchable.
 A document can optionally provide an `__id` field to set the document id.
@@ -68,7 +68,7 @@ Response:
 
 ### Query a Document
 
-`POST /index/{index_name}/query`
+`POST /index/{index_id}/query`
 
 Query an index with a provided search string.
 
@@ -100,5 +100,30 @@ Response:
       "score": 0.28768211603164673
     }
   ]
+}
+```
+
+### Delete a Document
+
+`DELETE /index/{index_id}/doc/{doc_id}`
+
+Delete a document from an index such that it is no longer searchable.
+
+#### Examples
+
+**Simple Full Text Search**
+
+Request:
+
+```bash
+http DELETE https://<api-id>.execute-api.us-east-1.amazonaws.com/prod/index/book-index-1/doc/b7c8aee4-9656-47a3-8217-df1b71056a83
+```
+
+Response:
+
+```json
+{
+  "__id": "b7c8aee4-9656-47a3-8217-df1b71056a83",
+  "deleted_at": "2022-11-14T21:30:04.845814727+00:00"
 }
 ```
