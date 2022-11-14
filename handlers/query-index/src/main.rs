@@ -1,35 +1,43 @@
-use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
+use lambda_http::{run, service_fn, Body, Error, IntoResponse, Request, RequestExt, Response};
 use pathery::{index_loader::IndexLoader, lambda, searcher::Searcher};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Serialize, Deserialize)]
 struct QueryRequest {
     query: String,
 }
 
-#[derive(Serialize, Deserialize)]
-struct QueryResponse {
-    results: Vec<String>,
-}
-
 async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
-    if let Body::Text(body) = event.body() {
-        let body_safe = body.to_string();
-        let path_params = event.path_parameters();
-        let index_id = path_params.first("index_id").expect("index_id not found");
-        let value = serde_json::from_str::<QueryRequest>(&body_safe)?;
-        let client = lambda::ddb_client().await;
-        let searcher = Searcher::create(&client, &IndexLoader::lambda()?, index_id)?;
-        let result = searcher.search(&value.query)?;
-        let resp = Response::builder()
-            .status(200)
-            .header("content-type", "application/json")
-            .body(serde_json::to_string(&result)?.into())
-            .map_err(Box::new)?;
-        Ok(resp)
-    } else {
-        panic!("Expected body text");
-    }
+    let index_id = {
+        let params = event.path_parameters();
+        if let Some(index_id) = params.first("index_id") {
+            index_id.to_string()
+        } else {
+            return Ok(json!({
+                "message": "Missing path_param index_id"
+            })
+            .into_response()
+            .await);
+        }
+    };
+
+    let payload = match event.payload::<QueryRequest>() {
+        Ok(Some(value)) => value,
+        _ => {
+            return Ok(json!({
+                "message": "Invalid body payload"
+            })
+            .into_response()
+            .await);
+        }
+    };
+
+    let client = lambda::ddb_client().await;
+    let searcher = Searcher::create(&client, &IndexLoader::lambda()?, &index_id)?;
+    let results = searcher.search(&payload.query)?;
+
+    Ok(serde_json::to_value(results)?.into_response().await)
 }
 
 #[tokio::main]
