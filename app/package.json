@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@internal/handler-post-index": "workspace:*",
-    "@internal/handler-query-index": "workspace:*"
+    "@internal/handler-query-index": "workspace:*",
+    "@internal/handler-delete-doc": "workspace:*"
   },
   "keywords": [],
   "author": "",

@@ -50,6 +50,11 @@ export class PatheryStack extends Stack {
     queryIndex.addEnvironment("TABLE_NAME", table.tableName);
     queryIndex.addLayers(configLayer);
 
+    const deleteDoc = new RustFunction(this, "delete-doc");
+    table.grantReadWriteData(deleteDoc);
+    deleteDoc.addEnvironment("TABLE_NAME", table.tableName);
+    deleteDoc.addLayers(configLayer);
+
     const api = new RestApi(this, "PatheryApi");
 
     const indexRoute = api.root.addResource("index");
@@ -61,5 +66,11 @@ export class PatheryStack extends Stack {
     const queryActionRoute = indexSingleRoute.addResource("query");
 
     queryActionRoute.addMethod("POST", new LambdaIntegration(queryIndex));
+
+    const documentRoute = indexSingleRoute.addResource("doc");
+
+    const documentSingleRoute = documentRoute.addResource("{doc_id}");
+
+    documentSingleRoute.addMethod("DELETE", new LambdaIntegration(deleteDoc));
   }
 }

@@ -24,14 +24,22 @@ importers:
 
   app:
     specifiers:
+      '@internal/handler-delete-doc': workspace:*
       '@internal/handler-post-index': workspace:*
       '@internal/handler-query-index': workspace:*
     dependencies:
+      '@internal/handler-delete-doc': link:../handlers/delete-doc
       '@internal/handler-post-index': link:../handlers/post-index
       '@internal/handler-query-index': link:../handlers/query-index
 
   dev-env:
     specifiers: {}
+
+  handlers/delete-doc:
+    specifiers:
+      '@internal/pathery-core': workspace:*
+    dependencies:
+      '@internal/pathery-core': link:../../packages/pathery
 
   handlers/post-index:
     specifiers:

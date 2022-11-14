@@ -69,6 +69,14 @@ impl Indexer {
         Ok(id)
     }
 
+    pub fn delete_doc(&mut self, doc_id: &str) -> Result<()> {
+        let id_field = self.get_field("__id")?;
+        self.writer
+            .delete_term(Term::from_field_text(id_field, doc_id));
+        self.writer.commit()?;
+        Ok(())
+    }
+
     fn get_field(&self, name: &str) -> Result<Field> {
         let schema = self.writer.index().schema();
         let field = schema
