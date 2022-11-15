@@ -5,6 +5,11 @@ pub mod indexer;
 pub mod lambda;
 pub mod searcher;
 
+pub use chrono;
+pub use serde;
+pub use serde_json as json;
+pub use tokio;
+
 #[cfg(test)]
 mod test {
 
