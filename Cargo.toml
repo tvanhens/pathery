@@ -1,6 +1,11 @@
 [workspace]
-
 members = [
     "packages/pathery",
     "handlers/*"
 ]
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+panic = "abort"

@@ -8,13 +8,8 @@
     "lib"
   ],
   "scripts": {
-    "build:pack-deps": "mkdir -p target && cp -r node_modules/@internal/handler-*/target/lambda/* target",
+    "build:pack-deps": "mkdir -p target && cp -r ../../target/lambda/* target",
     "build": "npm run build:pack-deps && tsc"
-  },
-  "devDependencies": {
-    "@internal/handler-post-index": "workspace:*",
-    "@internal/handler-query-index": "workspace:*",
-    "@internal/handler-delete-doc": "workspace:*"
   },
   "peerDependencies": {
     "aws-cdk-lib": "^2.50.0",

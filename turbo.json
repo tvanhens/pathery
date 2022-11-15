@@ -1,4 +1,5 @@
 {
+  "$schema": "https://turbo.build/schema.json",
   "pipeline": {
     "bootstrap:dev": {
       "outputs": ["cdk-outputs.json"]
@@ -7,9 +8,21 @@
       "dependsOn": ["^bootstrap:dev"],
       "outputs": []
     },
+    "//#build:lambda": {
+      "inputs": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "packages/**/*.rs",
+        "packages/**/Cargo.toml",
+        "handlers/**/*.rs",
+        "handlers/**/Cargo.toml",
+        ".cargo"
+      ],
+      "outputs": ["target/lambda"]
+    },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["target", "lib"]
+      "dependsOn": ["//#build:lambda", "^build"],
+      "outputs": ["lib"]
     },
     "synth": {
       "dependsOn": ["^build"],

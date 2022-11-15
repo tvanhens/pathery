@@ -51,6 +51,8 @@ async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
         }
     };
 
+    println!("Hello world!");
+
     let client = lambda::ddb_client().await;
 
     let mut indexer = Indexer::create(&client, &IndexLoader::lambda().unwrap(), &index_id)?;
