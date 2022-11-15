@@ -8,7 +8,7 @@
     "aws:sso:dev": "aws sso login --profile=pathery-dev",
     "build:lambda": "cargo lambda build --release --arm64",
     "build": "turbo run build",
-    "deploy:example": "npm run build && turbo run deploy"
+    "deploy:example": "turbo run deploy"
   },
   "keywords": [],
   "author": "",

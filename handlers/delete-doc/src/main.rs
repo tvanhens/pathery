@@ -1,11 +1,8 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::time::SystemTime;
-
 use pathery::chrono::{DateTime, Utc};
-use pathery::lambda::{self, http, tracing, tracing_subscriber, IntoResponse, RequestExt};
+use pathery::lambda::{self, http, http::PatheryRequest, tracing, tracing_subscriber};
 use pathery::{index_loader::IndexLoader, indexer::Indexer};
-use pathery::{json, serde, tokio};
+use pathery::{serde, tokio};
+use std::time::SystemTime;
 
 #[derive(serde::Serialize)]
 #[serde(crate = "self::serde")]
@@ -36,44 +33,16 @@ async fn main() -> Result<(), http::Error> {
 
     let client = &lambda::ddb_client().await;
 
-    let handler = move |event: http::Request| -> Pin<
-        Box<dyn Future<Output = Result<http::Response<http::Body>, http::Error>> + Send>,
-    > {
-        Box::pin(async move {
-            let index_id = {
-                let params = event.path_parameters();
-                if let Some(index_id) = params.first("index_id") {
-                    index_id.to_string()
-                } else {
-                    return Ok(json::json!({
-                        "message": "Missing path_param index_id"
-                    })
-                    .into_response()
-                    .await);
-                }
-            };
+    let handler = |event: http::Request| async move {
+        let index_id = event.required_path_param("index_id");
+        let doc_id = event.required_path_param("doc_id");
 
-            let doc_id = {
-                let params = event.path_parameters();
-                if let Some(index_id) = params.first("doc_id") {
-                    index_id.to_string()
-                } else {
-                    return Ok(json::json!({
-                        "message": "Missing path_param doc_id"
-                    })
-                    .into_response()
-                    .await);
-                }
-            };
+        let loader = IndexLoader::lambda().unwrap();
+        let mut indexer = Indexer::create(client, &loader, &index_id)?;
 
-            let mut indexer = Indexer::create(client, &IndexLoader::lambda().unwrap(), &index_id)?;
+        indexer.delete_doc(&doc_id)?;
 
-            indexer.delete_doc(&doc_id)?;
-
-            Ok(json::to_value(DeleteIndexResponse::new(&doc_id))?
-                .into_response()
-                .await)
-        })
+        http::success(&DeleteIndexResponse::new(&doc_id))
     };
 
     http::run(http::service_fn(handler)).await
