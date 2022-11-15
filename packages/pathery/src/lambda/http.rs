@@ -5,20 +5,24 @@ pub use lambda_http::{
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 
-fn response(status: u16, message: &str) -> http::Response<http::Body> {
+fn err_response(status: u16, message: &str) -> http::Response<http::Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
         .body(Body::from(json::json!({ "message": message }).to_string()))
-        .expect("Failed to build missing body response")
+        .expect("Failed to build response")
 }
 
 pub fn success<V>(value: &V) -> Result<http::Response<http::Body>, http::Error>
 where
     V: Serialize,
 {
-    let json_str = json::to_string(value)?;
-    Ok(response(200, &json_str))
+    let value = json::to_string(value)?;
+    Ok(Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(Body::from(value))
+        .expect("Failed to build response"))
 }
 
 pub enum PatheryHttpError {
@@ -28,7 +32,7 @@ pub enum PatheryHttpError {
 impl From<PatheryHttpError> for Result<http::Response<http::Body>, http::Error> {
     fn from(err: PatheryHttpError) -> Self {
         match err {
-            PatheryHttpError::MissingBody => Ok(response(400, "Missing body")),
+            PatheryHttpError::MissingBody => Ok(err_response(400, "Missing body")),
         }
     }
 }
