@@ -5,6 +5,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "cdk synth",
     "deploy": "cdk deploy -O cdk-outputs.json --require-approval never --method direct"
   },
   "dependencies": {

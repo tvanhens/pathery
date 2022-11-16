@@ -1,7 +1,7 @@
-use std::{fs, path::PathBuf};
-
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serde_json as json;
+use std::fs;
 use tantivy::schema::{self, Field, Schema, TextOptions};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -16,15 +16,24 @@ pub enum FieldKindConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FieldConfig {
-    name: String,
-    kind: FieldKindConfig,
+#[serde(tag = "kind")]
+pub enum FieldConfig {
+    #[serde(rename = "text")]
+    TextFieldConfig {
+        name: String,
+        flags: Vec<TextFieldOption>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct IndexConfig {
     prefix: String,
     fields: Vec<FieldConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PatheryConfig {
+    indexes: Vec<IndexConfig>,
 }
 
 pub trait SchemaLoader {
@@ -43,47 +52,39 @@ impl TantivySchema for Schema {
 }
 
 pub struct DirSchemaLoader {
-    configs: Vec<IndexConfig>,
+    config: PatheryConfig,
 }
 
 impl DirSchemaLoader {
     pub fn create() -> Result<Self> {
-        let root_path = "/opt/pathery-config";
-        let files: Vec<PathBuf> = fs::read_dir(root_path)?
-            .into_iter()
-            .map(|entry| entry.unwrap().path())
-            .collect();
-        let mut configs: Vec<IndexConfig> = Vec::new();
+        let config_path = "/opt/pathery/config.json";
+        let content = fs::read_to_string(config_path)?;
+        let config: PatheryConfig = json::from_str(&content)?;
 
-        for p in files {
-            let content = fs::read_to_string(p)?;
-            let config: IndexConfig = serde_yaml::from_str(&content)?;
-            configs.push(config);
-        }
-
-        Ok(DirSchemaLoader { configs })
+        Ok(DirSchemaLoader { config })
     }
 }
 
 impl SchemaLoader for DirSchemaLoader {
     fn load_schema(&self, index_id: &str) -> Schema {
-        self.configs
+        self.config
+            .indexes
             .iter()
             .find(|config| index_id.starts_with(&config.prefix))
             .map(|config| {
                 let mut schema = Schema::builder();
 
                 for field in &config.fields {
-                    match &field.kind {
-                        FieldKindConfig::Text { options } => {
+                    match &field {
+                        FieldConfig::TextFieldConfig { name, flags } => {
                             let field_opts =
-                                options
+                                flags
                                     .iter()
                                     .fold(TextOptions::default(), |acc, opt| match opt {
                                         TextFieldOption::TEXT => acc | schema::TEXT,
                                         TextFieldOption::STORED => acc | schema::STORED,
                                     });
-                            schema.add_text_field(&field.name, field_opts);
+                            schema.add_text_field(&name, field_opts);
                         }
                     }
                 }
@@ -116,4 +117,33 @@ impl SchemaLoader for TestSchemaLoader {
 
 pub fn test_schema_loader() -> TestSchemaLoader {
     TestSchemaLoader {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_test_config() {
+        let config = json!({
+                "indexes": [{
+                    "prefix": "book-index-v1-",
+                    "fields": [
+                        {
+                        "name": "title",
+                        "flags": ["STORED", "TEXT"],
+                        "kind": "text",
+                        },
+                        {
+                        "name": "author",
+                        "flags": ["STORED", "TEXT"],
+                        "kind": "text",
+                        },
+                    ],
+            }]
+        });
+
+        serde_json::from_value::<PatheryConfig>(config).expect("should not throw");
+    }
 }

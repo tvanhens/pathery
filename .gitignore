@@ -2,6 +2,7 @@ node_modules
 dev-env.json
 
 .turbo
+.pathery
 
 cdk.out
 target

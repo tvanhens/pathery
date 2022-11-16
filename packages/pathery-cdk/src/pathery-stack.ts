@@ -7,7 +7,9 @@ import { Architecture, Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
+import { PatheryConfig } from "./config";
 import * as path from "path";
+import * as fs from "fs";
 
 class RustFunction extends Function {
   constructor(scope: Construct, id: string, props?: Partial<FunctionProps>) {
@@ -22,8 +24,12 @@ class RustFunction extends Function {
   }
 }
 
+export interface PatheryStackProps {
+  config: PatheryConfig;
+}
+
 export class PatheryStack extends Stack {
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: PatheryStackProps) {
     super(scope, id);
 
     const indexWriterQueue = new Queue(this, "IndexWriterQueue", {
@@ -58,8 +64,13 @@ export class PatheryStack extends Stack {
       path: "/pathery-data",
     });
 
+    fs.mkdirSync(".pathery/layer/pathery", { recursive: true });
+    fs.writeFileSync(
+      ".pathery/layer/pathery/config.json",
+      JSON.stringify(props.config)
+    );
     let configLayer = new LayerVersion(this, "config-layer", {
-      code: Code.fromAsset("config"),
+      code: Code.fromAsset(".pathery/layer"),
       compatibleArchitectures: [Architecture.ARM_64],
       compatibleRuntimes: [Runtime.PROVIDED_AL2],
     });
