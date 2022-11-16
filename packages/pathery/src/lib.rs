@@ -1,13 +1,14 @@
 pub mod index;
 pub mod index_loader;
-pub mod indexer;
 pub mod lambda;
-pub mod searcher;
 
+pub use anyhow;
 pub use chrono;
 pub use serde;
 pub use serde_json as json;
+pub use tantivy;
 pub use tokio;
+pub use uuid;
 
 #[cfg(test)]
 mod test {

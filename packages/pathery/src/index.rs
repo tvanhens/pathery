@@ -1,8 +1,6 @@
-use std::{fs, path::Path};
-
-use tantivy::{directory::MmapDirectory, Index};
-
 use crate::index_loader::IndexLoader;
+use std::{fs, path::Path};
+use tantivy::{directory::MmapDirectory, schema::Field, Index, IndexWriter};
 
 pub struct IndexProvider {
     schema_loader: IndexLoader,
@@ -32,5 +30,23 @@ impl IndexProvider {
         };
 
         index
+    }
+}
+
+pub trait TantivyIndex {
+    fn default_writer(&self) -> IndexWriter;
+
+    fn id_field(&self) -> Field;
+}
+
+impl TantivyIndex for Index {
+    fn default_writer(&self) -> IndexWriter {
+        self.writer(100_000_000).expect("Writer should be availble")
+    }
+
+    fn id_field(&self) -> Field {
+        self.schema()
+            .get_field("__id")
+            .expect("__id field should exist")
     }
 }

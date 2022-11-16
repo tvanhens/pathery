@@ -1,7 +1,8 @@
 use pathery::chrono::{DateTime, Utc};
-use pathery::indexer::Indexer;
+use pathery::index::{IndexProvider, TantivyIndex};
 use pathery::lambda::{http, http::PatheryRequest, tracing, tracing_subscriber};
-use pathery::{serde, tokio};
+use pathery::tantivy::Term;
+use pathery::{anyhow, serde, tokio};
 use std::time::SystemTime;
 
 #[derive(serde::Serialize)]
@@ -23,6 +24,15 @@ impl DeleteIndexResponse {
     }
 }
 
+fn delete_doc(index_id: &str, doc_id: &str) -> anyhow::Result<()> {
+    let index = IndexProvider::lambda_provider().load_index(index_id);
+    let mut writer = index.default_writer();
+    let id_field = index.id_field();
+    writer.delete_term(Term::from_field_text(id_field, doc_id));
+    writer.commit()?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), http::Error> {
     tracing_subscriber::fmt()
@@ -34,9 +44,8 @@ async fn main() -> Result<(), http::Error> {
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
         let doc_id = event.required_path_param("doc_id");
-        let mut indexer = Indexer::create(&index_id)?;
 
-        indexer.delete_doc(&doc_id)?;
+        delete_doc(&index_id, &doc_id)?;
 
         http::success(&DeleteIndexResponse::new(&doc_id))
     };
