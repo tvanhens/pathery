@@ -50,3 +50,17 @@ impl TantivyIndex for Index {
             .expect("__id field should exist")
     }
 }
+
+// TODO: Figure out how to exclude this in production
+pub fn test_index() -> Index {
+    use tantivy::schema::{self, Schema};
+
+    let mut schema = Schema::builder();
+
+    schema.add_text_field("__id", schema::STRING | schema::STORED);
+    schema.add_text_field("author", schema::TEXT | schema::STORED);
+    schema.add_text_field("title", schema::TEXT | schema::STORED);
+    schema.add_text_field("body", schema::TEXT | schema::STORED);
+
+    Index::create_in_ram(schema.build())
+}

@@ -5,7 +5,7 @@ pub use lambda_http::{
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 
-fn err_response(status: u16, message: &str) -> http::Response<http::Body> {
+pub fn err_response(status: u16, message: &str) -> http::Response<http::Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
