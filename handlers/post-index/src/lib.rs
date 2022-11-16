@@ -68,15 +68,14 @@ pub fn index_doc(index: &Index, raw_doc: &json::Value) -> Result<String, IndexEr
     let mut index_doc = Document::new();
 
     for (key, value) in doc_obj.iter() {
-        if let Some(field) = schema.get_field(key) {
-            match value {
-                Value::String(v) => {
+        match value {
+            Value::String(v) => {
+                if let Some(field) = schema.get_field(key) {
                     index_doc.add_text(field, v);
-                    Ok(())
                 }
-                _ => Err(IndexError::UnsupportedJsonValue),
-            }?;
-        }
+            }
+            _ => return Err(IndexError::UnsupportedJsonValue),
+        };
     }
 
     if index_doc.len() < 1 {
@@ -101,6 +100,8 @@ mod tests {
     use super::*;
     use pathery::index::test_index;
 
+    // Happy Path
+
     #[test]
     fn index_a_doc_with_no_id() {
         let index = test_index();
@@ -118,11 +119,62 @@ mod tests {
     }
 
     #[test]
+    fn reindex_doc_with_same_id() {
+        let index = test_index();
+
+        let doc = json::json!({
+            "__id": "zen",
+            "title": "Zen and the Art of Motorcycle Maintentance",
+            "author": "Robert Pirsig"
+        });
+
+        index_doc(&index, &doc).unwrap();
+
+        let doc = json::json!({
+            "__id": "zen",
+            "title": "Zen and the Art of Motorcycle Maintentance",
+            "author": "Someone else"
+        });
+
+        index_doc(&index, &doc).unwrap();
+
+        assert_eq!(1, index.reader().unwrap().searcher().num_docs());
+    }
+
+    // Error States
+
+    #[test]
+    fn index_a_non_object() {
+        let index = test_index();
+
+        let doc = json::json!([]);
+
+        let result = index_doc(&index, &doc);
+
+        assert_eq!(result, Err(IndexError::NotJsonObject));
+
+        assert_eq!(0, index.reader().unwrap().searcher().num_docs());
+    }
+
+    #[test]
+    fn index_an_unsupported_value() {
+        let index = test_index();
+
+        let doc = json::json!({"foo": 1});
+
+        let result = index_doc(&index, &doc);
+
+        assert_eq!(result, Err(IndexError::UnsupportedJsonValue));
+
+        assert_eq!(0, index.reader().unwrap().searcher().num_docs());
+    }
+
+    #[test]
     fn index_a_field_that_does_not_exist() {
         let index = test_index();
 
         let doc = json::json!({
-            "foobar": "Zen and the Art of Motorcycle Maintentance",
+            "foobar": "baz",
         });
 
         let result = index_doc(&index, &doc);
