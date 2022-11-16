@@ -16,6 +16,19 @@
     "constructs": "^10.1.155"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Tyler van Hensbergen",
+  "license": "MIT",
+  "directories": {
+    "lib": "lib"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tvanhens/pathery.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tvanhens/pathery/issues"
+  },
+  "homepage": "https://github.com/tvanhens/pathery#readme",
+  "description": ""
 }
