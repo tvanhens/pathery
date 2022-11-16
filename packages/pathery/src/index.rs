@@ -1,6 +1,9 @@
-use crate::schema::{DirSchemaLoader, SchemaLoader};
+use crate::{
+    directory::PatheryDirectory,
+    schema::{DirSchemaLoader, SchemaLoader},
+};
 use std::{fs, path::Path};
-use tantivy::{directory::MmapDirectory, schema::Field, Index, IndexWriter};
+use tantivy::{schema::Field, Index, IndexWriter};
 
 pub trait IndexLoader {
     fn load_index(&self, index_id: &str) -> Index;
@@ -22,7 +25,7 @@ impl IndexLoader for LambdaIndexProvider {
     fn load_index(&self, index_id: &str) -> Index {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
-        let index = if let Ok(existing_dir) = MmapDirectory::open(&directory_path) {
+        let index = if let Ok(existing_dir) = PatheryDirectory::open(&directory_path) {
             Index::open(existing_dir).expect("Index should be openable")
         } else {
             fs::create_dir(&directory_path).expect("Directory should be creatable");
