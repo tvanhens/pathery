@@ -67,6 +67,9 @@ async fn main() -> Result<(), sqs::Error> {
         for (_index_id, writer) in writers.into_iter() {
             let mut writer = writer;
             writer.commit().expect("commit should succeed");
+            writer
+                .wait_merging_threads()
+                .expect("merge should finish without error");
         }
 
         Ok::<(), sqs::Error>(())
