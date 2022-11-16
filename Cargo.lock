@@ -142,6 +142,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-sqs"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b26bb3d12238492cb12bde0de8486679b007daada21fdb110913b32a2a38275"
+dependencies = [
+ "aws-endpoint",
+ "aws-http",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-http-tower",
+ "aws-smithy-query",
+ "aws-smithy-types",
+ "aws-smithy-xml",
+ "aws-types",
+ "bytes",
+ "http",
+ "tokio-stream",
+ "tower",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +291,8 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "pin-utils",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1394,7 +1419,9 @@ name = "pathery"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "aws-config",
+ "aws-sdk-sqs",
  "aws_lambda_events",
  "chrono",
  "lambda_http",

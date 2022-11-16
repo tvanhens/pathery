@@ -1,8 +1,10 @@
+use pathery::aws::SQSQueueSender;
 use pathery::chrono::{DateTime, Utc};
-use pathery::index::TantivyIndex;
 use pathery::json::Value;
 use pathery::lambda::http;
-use pathery::tantivy::{Document, Index, Term};
+use pathery::message::WriterMessage;
+use pathery::schema::{SchemaLoader, TantivySchema};
+use pathery::tantivy::Document;
 use pathery::{json, serde, uuid};
 use std::time::SystemTime;
 
@@ -49,9 +51,17 @@ impl PostIndexResponse {
     }
 }
 
-pub fn index_doc(index: &Index, raw_doc: &json::Value) -> Result<String, IndexError> {
-    let mut writer = index.default_writer();
-    let schema = index.schema();
+pub async fn index_doc<C, L>(
+    client: &C,
+    schema_loader: &L,
+    index_id: &str,
+    raw_doc: &json::Value,
+) -> Result<String, IndexError>
+where
+    C: SQSQueueSender,
+    L: SchemaLoader,
+{
+    let schema = schema_loader.load_schema(index_id);
 
     let mut doc_obj = raw_doc.clone();
     let doc_obj = doc_obj
@@ -63,7 +73,7 @@ pub fn index_doc(index: &Index, raw_doc: &json::Value) -> Result<String, IndexEr
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or_else(|| generate_id());
 
-    let id_field = index.id_field();
+    let id_field = schema.id_field();
 
     let mut index_doc = Document::new();
 
@@ -85,102 +95,79 @@ pub fn index_doc(index: &Index, raw_doc: &json::Value) -> Result<String, IndexEr
 
     index_doc.add_text(id_field, &id);
 
-    writer.delete_term(Term::from_field_text(id_field, &id));
-    writer
-        .add_document(index_doc)
-        .expect("Adding a document should not error");
+    client
+        .send_fifo(
+            index_id,
+            &WriterMessage::index_single_doc(index_id, index_doc),
+        )
+        .await;
 
-    writer.commit().expect("Commit should not error");
-
-    Ok(id)
+    Ok(id.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pathery::index::test_index;
+    use pathery::{
+        aws::{test_queue_client, TestQueueClient},
+        schema::{test_schema_loader, TestSchemaLoader},
+        tokio,
+    };
+
+    fn setup() -> (TestQueueClient, TestSchemaLoader) {
+        (test_queue_client(), test_schema_loader())
+    }
 
     // Happy Path
 
-    #[test]
-    fn index_a_doc_with_no_id() {
-        let index = test_index();
+    #[tokio::test]
+    async fn index_a_doc_with_no_id() {
+        let (client, loader) = setup();
 
         let doc = json::json!({
             "title": "Zen and the Art of Motorcycle Maintentance",
             "author": "Robert Pirsig"
         });
 
-        let result = index_doc(&index, &doc);
+        let result = index_doc(&client, &loader, "test", &doc).await;
 
         result.expect("result should not be an error");
-
-        assert_eq!(1, index.reader().unwrap().searcher().num_docs());
-    }
-
-    #[test]
-    fn reindex_doc_with_same_id() {
-        let index = test_index();
-
-        let doc = json::json!({
-            "__id": "zen",
-            "title": "Zen and the Art of Motorcycle Maintentance",
-            "author": "Robert Pirsig"
-        });
-
-        index_doc(&index, &doc).unwrap();
-
-        let doc = json::json!({
-            "__id": "zen",
-            "title": "Zen and the Art of Motorcycle Maintentance",
-            "author": "Someone else"
-        });
-
-        index_doc(&index, &doc).unwrap();
-
-        assert_eq!(1, index.reader().unwrap().searcher().num_docs());
     }
 
     // Error States
 
-    #[test]
-    fn index_a_non_object() {
-        let index = test_index();
+    #[tokio::test]
+    async fn index_a_non_object() {
+        let (client, loader) = setup();
 
         let doc = json::json!([]);
 
-        let result = index_doc(&index, &doc);
+        let result = index_doc(&client, &loader, "test", &doc).await;
 
         assert_eq!(result, Err(IndexError::NotJsonObject));
-
-        assert_eq!(0, index.reader().unwrap().searcher().num_docs());
     }
 
-    #[test]
-    fn index_an_unsupported_value() {
-        let index = test_index();
+    #[tokio::test]
+    async fn index_an_unsupported_value() {
+        let (client, loader) = setup();
 
         let doc = json::json!({"foo": 1});
 
-        let result = index_doc(&index, &doc);
+        let result = index_doc(&client, &loader, "test", &doc).await;
 
         assert_eq!(result, Err(IndexError::UnsupportedJsonValue));
-
-        assert_eq!(0, index.reader().unwrap().searcher().num_docs());
     }
 
-    #[test]
-    fn index_a_field_that_does_not_exist() {
-        let index = test_index();
+    #[tokio::test]
+    async fn index_a_field_that_does_not_exist() {
+        let (client, loader) = setup();
 
         let doc = json::json!({
             "foobar": "baz",
         });
 
-        let result = index_doc(&index, &doc);
+        let result = index_doc(&client, &loader, "test", &doc).await;
 
         assert_eq!(result, Err(IndexError::EmptyObject));
-
-        assert_eq!(0, index.reader().unwrap().searcher().num_docs());
     }
 }

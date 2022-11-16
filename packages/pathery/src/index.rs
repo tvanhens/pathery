@@ -1,30 +1,32 @@
-use crate::index_loader::IndexLoader;
+use crate::schema::{DirSchemaLoader, SchemaLoader};
 use std::{fs, path::Path};
 use tantivy::{directory::MmapDirectory, schema::Field, Index, IndexWriter};
 
-pub struct IndexProvider {
-    schema_loader: IndexLoader,
+pub trait IndexLoader {
+    fn load_index(&self, index_id: &str) -> Index;
 }
 
-impl IndexProvider {
-    pub fn lambda_provider() -> Self {
-        IndexProvider {
-            schema_loader: IndexLoader::create("/opt/pathery-config")
-                .expect("Index should be loadable"),
+pub struct LambdaIndexProvider {
+    schema_loader: DirSchemaLoader,
+}
+
+impl LambdaIndexProvider {
+    pub fn create() -> Self {
+        Self {
+            schema_loader: DirSchemaLoader::create().expect("SchemaLoader should create"),
         }
     }
+}
 
-    pub fn load_index(&self, index_id: &str) -> Index {
+impl IndexLoader for LambdaIndexProvider {
+    fn load_index(&self, index_id: &str) -> Index {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let index = if let Ok(existing_dir) = MmapDirectory::open(&directory_path) {
             Index::open(existing_dir).expect("Index should be openable")
         } else {
             fs::create_dir(&directory_path).expect("Directory should be creatable");
-            let schema = self
-                .schema_loader
-                .schema_for(index_id)
-                .expect("Schema should be loadable");
+            let schema = self.schema_loader.load_schema(index_id);
             Index::create_in_dir(Path::new(&directory_path), schema)
                 .expect("Index should be creatable")
         };
@@ -49,18 +51,4 @@ impl TantivyIndex for Index {
             .get_field("__id")
             .expect("__id field should exist")
     }
-}
-
-// TODO: Figure out how to exclude this in production
-pub fn test_index() -> Index {
-    use tantivy::schema::{self, Schema};
-
-    let mut schema = Schema::builder();
-
-    schema.add_text_field("__id", schema::STRING | schema::STORED);
-    schema.add_text_field("author", schema::TEXT | schema::STORED);
-    schema.add_text_field("title", schema::TEXT | schema::STORED);
-    schema.add_text_field("body", schema::TEXT | schema::STORED);
-
-    Index::create_in_ram(schema.build())
 }

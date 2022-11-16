@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tantivy::schema::{self, Schema, TextOptions};
+use tantivy::schema::{self, Field, Schema, TextOptions};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TextFieldOption {
@@ -27,12 +27,28 @@ pub struct IndexConfig {
     fields: Vec<FieldConfig>,
 }
 
-pub struct IndexLoader {
+pub trait SchemaLoader {
+    fn load_schema(&self, index_id: &str) -> Schema;
+}
+
+pub trait TantivySchema {
+    fn id_field(&self) -> Field;
+}
+
+impl TantivySchema for Schema {
+    fn id_field(&self) -> Field {
+        self.get_field("__id")
+            .expect("__id field should be present")
+    }
+}
+
+pub struct DirSchemaLoader {
     configs: Vec<IndexConfig>,
 }
 
-impl IndexLoader {
-    pub fn create(root_path: &str) -> Result<IndexLoader> {
+impl DirSchemaLoader {
+    pub fn create() -> Result<Self> {
+        let root_path = "/opt/pathery-config";
         let files: Vec<PathBuf> = fs::read_dir(root_path)?
             .into_iter()
             .map(|entry| entry.unwrap().path())
@@ -45,14 +61,12 @@ impl IndexLoader {
             configs.push(config);
         }
 
-        Ok(IndexLoader { configs })
+        Ok(DirSchemaLoader { configs })
     }
+}
 
-    pub fn lambda() -> Result<IndexLoader> {
-        IndexLoader::create("/opt/pathery-config")
-    }
-
-    pub fn schema_for(&self, index_id: &str) -> Option<Schema> {
+impl SchemaLoader for DirSchemaLoader {
+    fn load_schema(&self, index_id: &str) -> Schema {
         self.configs
             .iter()
             .find(|config| index_id.starts_with(&config.prefix))
@@ -81,36 +95,25 @@ impl IndexLoader {
 
                 schema.build()
             })
+            .expect("schema definition should exist")
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use anyhow::Result;
+pub struct TestSchemaLoader {}
 
-    #[test]
-    fn parse_index_config() -> Result<()> {
-        let parsed: IndexConfig = serde_yaml::from_str(
-            "
-        prefix: hello
-        fields:
-            - name: stuff
-              kind: !Text { options: [STORED] }
-            - name: things
-              kind: !Text { options: [] }
-              ",
-        )?;
+impl SchemaLoader for TestSchemaLoader {
+    fn load_schema(&self, _index_id: &str) -> Schema {
+        let mut schema = Schema::builder();
 
-        assert_eq!(parsed.fields.len(), 2);
+        schema.add_text_field("__id", schema::STRING | schema::STORED);
+        schema.add_text_field("author", schema::TEXT | schema::STORED);
+        schema.add_text_field("title", schema::TEXT | schema::STORED);
+        schema.add_text_field("body", schema::TEXT | schema::STORED);
 
-        Ok(())
+        schema.build()
     }
+}
 
-    #[test]
-    fn load_test_config() -> Result<()> {
-        let loader = IndexLoader::create("../../app/config/pathery-config")?;
-        loader.schema_for("book-index-1").unwrap();
-        Ok(())
-    }
+pub fn test_schema_loader() -> TestSchemaLoader {
+    TestSchemaLoader {}
 }

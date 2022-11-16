@@ -1,5 +1,6 @@
-use pathery::index::IndexProvider;
+use pathery::aws::lambda_queue_client;
 use pathery::lambda::{self, http, http::PatheryRequest};
+use pathery::schema::DirSchemaLoader;
 use pathery::{json, tokio};
 use post_index::{index_doc, PostIndexResponse};
 
@@ -11,6 +12,9 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
+    let client = &lambda_queue_client().await;
+    let schema_loader = &DirSchemaLoader::create().expect("DirSchema loader should create");
+
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
 
@@ -19,9 +23,7 @@ async fn main() -> Result<(), http::Error> {
             Err(err) => return err.into(),
         };
 
-        let index = IndexProvider::lambda_provider().load_index(&index_id);
-
-        let doc_id = match index_doc(&index, &payload) {
+        let doc_id = match index_doc(client, schema_loader, &index_id, &payload).await {
             Ok(v) => v,
             Err(err) => return err.into(),
         };

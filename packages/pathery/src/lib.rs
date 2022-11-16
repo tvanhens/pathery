@@ -1,6 +1,8 @@
+pub mod aws;
 pub mod index;
-pub mod index_loader;
 pub mod lambda;
+pub mod message;
+pub mod schema;
 
 pub use anyhow;
 pub use chrono;

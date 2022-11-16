@@ -1,4 +1,4 @@
-use pathery::index::IndexProvider;
+use pathery::index::{IndexLoader, LambdaIndexProvider};
 use pathery::json::Map;
 use pathery::lambda;
 use pathery::lambda::{http, http::PatheryRequest};
@@ -35,8 +35,11 @@ impl SearchResults {
     }
 }
 
-pub fn search(index_id: &str, query: &str) -> anyhow::Result<SearchResults> {
-    let index = IndexProvider::lambda_provider().load_index(index_id);
+pub fn search<L>(index_loader: &L, index_id: &str, query: &str) -> anyhow::Result<SearchResults>
+where
+    L: IndexLoader,
+{
+    let index = index_loader.load_index(index_id);
 
     let reader = index.reader().expect("Reader should load");
 
@@ -98,6 +101,8 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
+    let index_loader = &LambdaIndexProvider::create();
+
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
 
@@ -106,7 +111,7 @@ async fn main() -> Result<(), http::Error> {
             Err(err) => return err.into(),
         };
 
-        let results = search(&index_id, &payload.query)?;
+        let results = search(index_loader, &index_id, &payload.query)?;
 
         http::success(&results)
     };
