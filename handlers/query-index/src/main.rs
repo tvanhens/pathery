@@ -1,5 +1,5 @@
+use pathery::lambda;
 use pathery::lambda::{http, http::PatheryRequest};
-use pathery::{index_loader::IndexLoader, lambda, searcher::Searcher};
 use pathery::{serde, tokio};
 
 #[derive(serde::Deserialize)]
@@ -16,8 +16,6 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let client = &lambda::ddb_client().await;
-
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
 
@@ -26,9 +24,7 @@ async fn main() -> Result<(), http::Error> {
             Err(err) => return err.into(),
         };
 
-        let searcher = Searcher::create(&client, &IndexLoader::lambda()?, &index_id)?;
-
-        let results = searcher.search(&payload.query)?;
+        let results = pathery::searcher::search(&index_id, &payload.query)?;
 
         http::success(&results)
     };

@@ -1,6 +1,6 @@
 use pathery::chrono::{DateTime, Utc};
-use pathery::lambda::{self, http, http::PatheryRequest, tracing, tracing_subscriber};
-use pathery::{index_loader::IndexLoader, indexer::Indexer};
+use pathery::indexer::Indexer;
+use pathery::lambda::{http, http::PatheryRequest, tracing, tracing_subscriber};
 use pathery::{serde, tokio};
 use std::time::SystemTime;
 
@@ -31,14 +31,10 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let client = &lambda::ddb_client().await;
-
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
         let doc_id = event.required_path_param("doc_id");
-
-        let loader = IndexLoader::lambda().unwrap();
-        let mut indexer = Indexer::create(client, &loader, &index_id)?;
+        let mut indexer = Indexer::create(&index_id)?;
 
         indexer.delete_doc(&doc_id)?;
 

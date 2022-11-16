@@ -1,9 +1,8 @@
-use std::time::SystemTime;
-
 use pathery::chrono::{DateTime, Utc};
+use pathery::indexer::Indexer;
 use pathery::lambda::{self, http, http::PatheryRequest};
-use pathery::{index_loader::IndexLoader, indexer::Indexer};
 use pathery::{json, serde, tokio};
+use std::time::SystemTime;
 
 #[derive(serde::Serialize)]
 #[serde(crate = "self::serde")]
@@ -32,8 +31,6 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let client = &lambda::ddb_client().await;
-
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
 
@@ -42,7 +39,7 @@ async fn main() -> Result<(), http::Error> {
             Err(err) => return err.into(),
         };
 
-        let mut indexer = Indexer::create(&client, &IndexLoader::lambda().unwrap(), &index_id)?;
+        let mut indexer = Indexer::create(&index_id)?;
 
         let doc_id = indexer.index_doc(&payload)?;
 
