@@ -1,5 +1,5 @@
-use pathery::aws::lambda_queue_client;
 use pathery::lambda::{self, http, http::PatheryRequest};
+use pathery::message::lambda_writer_sender;
 use pathery::schema::DirSchemaLoader;
 use pathery::{json, tokio};
 use post_index::{index_doc, PostIndexResponse};
@@ -12,7 +12,7 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let client = &lambda_queue_client().await;
+    let client = &lambda_writer_sender().await;
     let schema_loader = &DirSchemaLoader::create().expect("DirSchema loader should create");
 
     let handler = |event: http::Request| async move {

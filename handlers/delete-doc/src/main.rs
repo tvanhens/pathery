@@ -1,7 +1,6 @@
-use pathery::aws::{lambda_queue_client, SQSQueueSender};
 use pathery::chrono::{DateTime, Utc};
 use pathery::lambda::{http, http::PatheryRequest, tracing, tracing_subscriber};
-use pathery::message::WriterMessage;
+use pathery::message::{lambda_writer_sender, WriterMessage, WriterSender};
 use pathery::{serde, tokio};
 use std::time::SystemTime;
 
@@ -26,10 +25,10 @@ impl DeleteIndexResponse {
 
 async fn delete_doc<C>(client: &C, index_id: &str, doc_id: &str)
 where
-    C: SQSQueueSender,
+    C: WriterSender,
 {
     client
-        .send_fifo(index_id, &WriterMessage::delete_doc(index_id, doc_id))
+        .send_message(index_id, &WriterMessage::delete_doc(index_id, doc_id))
         .await;
 }
 
@@ -41,7 +40,7 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let client = &lambda_queue_client().await;
+    let client = &lambda_writer_sender().await;
 
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");

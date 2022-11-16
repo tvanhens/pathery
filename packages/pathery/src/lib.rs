@@ -1,4 +1,3 @@
-pub mod aws;
 pub mod index;
 pub mod lambda;
 pub mod message;

@@ -1,8 +1,7 @@
-use pathery::aws::SQSQueueSender;
 use pathery::chrono::{DateTime, Utc};
 use pathery::json::Value;
 use pathery::lambda::http;
-use pathery::message::WriterMessage;
+use pathery::message::{WriterMessage, WriterSender};
 use pathery::schema::{SchemaLoader, TantivySchema};
 use pathery::tantivy::Document;
 use pathery::{json, serde, uuid};
@@ -58,7 +57,7 @@ pub async fn index_doc<C, L>(
     raw_doc: &json::Value,
 ) -> Result<String, IndexError>
 where
-    C: SQSQueueSender,
+    C: WriterSender,
     L: SchemaLoader,
 {
     let schema = schema_loader.load_schema(index_id);
@@ -96,7 +95,7 @@ where
     index_doc.add_text(id_field, &id);
 
     client
-        .send_fifo(
+        .send_message(
             index_id,
             &WriterMessage::index_single_doc(index_id, index_doc),
         )
@@ -109,13 +108,13 @@ where
 mod tests {
     use super::*;
     use pathery::{
-        aws::{test_queue_client, TestQueueClient},
+        message::{test_writer_sender, TestWriterSender},
         schema::{test_schema_loader, TestSchemaLoader},
         tokio,
     };
 
-    fn setup() -> (TestQueueClient, TestSchemaLoader) {
-        (test_queue_client(), test_schema_loader())
+    fn setup() -> (TestWriterSender, TestSchemaLoader) {
+        (test_writer_sender(), test_schema_loader())
     }
 
     // Happy Path
