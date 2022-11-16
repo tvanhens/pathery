@@ -1,11 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "pipeline": {
-    "bootstrap:dev": {
-      "outputs": ["cdk-outputs.json"]
-    },
     "test": {
-      "dependsOn": ["^bootstrap:dev"],
       "outputs": []
     },
     "//#build:lambda": {

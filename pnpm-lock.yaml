@@ -30,42 +30,8 @@ importers:
     dependencies:
       '@pathery/cdk': link:../packages/pathery-cdk
 
-  dev-env:
-    specifiers: {}
-
-  handlers/delete-doc:
-    specifiers:
-      '@internal/pathery-core': workspace:*
-    dependencies:
-      '@internal/pathery-core': link:../../packages/pathery
-
-  handlers/post-index:
-    specifiers:
-      '@internal/pathery-core': workspace:*
-    dependencies:
-      '@internal/pathery-core': link:../../packages/pathery
-
-  handlers/query-index:
-    specifiers:
-      '@internal/pathery-core': workspace:*
-    dependencies:
-      '@internal/pathery-core': link:../../packages/pathery
-
-  packages/pathery:
-    specifiers:
-      '@internal/dev-env': workspace:*
-    dependencies:
-      '@internal/dev-env': link:../../dev-env
-
   packages/pathery-cdk:
-    specifiers:
-      '@internal/handler-delete-doc': workspace:*
-      '@internal/handler-post-index': workspace:*
-      '@internal/handler-query-index': workspace:*
-    devDependencies:
-      '@internal/handler-delete-doc': link:../../handlers/delete-doc
-      '@internal/handler-post-index': link:../../handlers/post-index
-      '@internal/handler-query-index': link:../../handlers/query-index
+    specifiers: {}
 
 packages:
 
