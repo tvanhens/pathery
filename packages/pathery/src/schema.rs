@@ -8,6 +8,7 @@ use tantivy::schema::{self, Field, Schema, TextOptions};
 pub enum TextFieldOption {
     STORED,
     TEXT,
+    STRING,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -83,6 +84,7 @@ impl SchemaLoader for DirSchemaLoader {
                                     .fold(TextOptions::default(), |acc, opt| match opt {
                                         TextFieldOption::TEXT => acc | schema::TEXT,
                                         TextFieldOption::STORED => acc | schema::STORED,
+                                        TextFieldOption::STRING => acc | schema::STRING,
                                     });
                             schema.add_text_field(name, field_opts);
                         }
@@ -137,7 +139,7 @@ mod tests {
                         },
                         {
                         "name": "author",
-                        "flags": ["STORED", "TEXT"],
+                        "flags": ["STORED", "STRING"],
                         "kind": "text",
                         },
                     ],
