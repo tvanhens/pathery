@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.4
+
+### Patch Changes
+
+- 8220a12: Improve package docs, keywords and description.
+
 ## 0.0.3
 
 ### Patch Changes
