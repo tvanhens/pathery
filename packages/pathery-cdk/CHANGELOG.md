@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.5
+
+### Patch Changes
+
+- 255c378: Add the STRING flag for text fields to enable exact-only matching.
+
 ## 0.0.4
 
 ### Patch Changes
