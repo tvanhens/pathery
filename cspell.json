@@ -1,0 +1,16 @@
+// cSpell Settings
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "chrono",
+    "Hensbergen",
+    "Mmap",
+    "Pathery",
+    "Pirsig",
+    "Runtimes",
+    "upsert"
+  ],
+  "flagWords": [],
+  "ignorePaths": ["node_modules/**", "target/**", "lib/**"]
+}

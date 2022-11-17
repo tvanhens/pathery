@@ -124,7 +124,7 @@ mod tests {
         let (client, loader) = setup();
 
         let doc = json::json!({
-            "title": "Zen and the Art of Motorcycle Maintentance",
+            "title": "Zen and the Art of Motorcycle Maintenance",
             "author": "Robert Pirsig"
         });
 

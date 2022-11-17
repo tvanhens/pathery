@@ -46,7 +46,8 @@ pub trait TantivyIndex {
 
 impl TantivyIndex for Index {
     fn default_writer(&self) -> IndexWriter {
-        self.writer(100_000_000).expect("Writer should be availble")
+        self.writer(100_000_000)
+            .expect("Writer should be available")
     }
 
     fn id_field(&self) -> Field {
