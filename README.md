@@ -22,4 +22,4 @@ Pathery is a **serverless search service** built on AWS using Rust, CDK and [Tan
 
 Check out the [getting started guide][getting-started] to deploy Pathery into your AWS account using CDK.
 
-[getting-started]: ./doc/get-started.md
+[getting-started]: ./examples/getting-started/
