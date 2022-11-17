@@ -8,6 +8,9 @@
     "aws:sso:dev": "aws sso login --profile=pathery-dev",
     "build:lambda": "cargo lambda build --release --arm64",
     "build": "turbo run build",
+    "version": "changeset version",
+    "publish": "pnpm publish -r --access public",
+    "release": "pnpm run build && pnpm run publish",
     "deploy:example": "turbo run deploy"
   },
   "keywords": [],
