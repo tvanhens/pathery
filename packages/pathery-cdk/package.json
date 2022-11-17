@@ -1,7 +1,16 @@
 {
   "name": "@pathery/cdk",
-  "description": "AWS CDK Construct for Pathery Serverless Search.",
   "version": "0.0.3",
+  "license": "MIT",
+  "description": "AWS CDK Construct for Pathery Serverless Search.",
+  "keywords": [
+    "aws",
+    "cdk",
+    "serverless",
+    "search",
+    "full-text"
+  ],
+  "author": "Tyler van Hensbergen",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
@@ -16,9 +25,6 @@
     "aws-cdk-lib": "^2.50.0",
     "constructs": "^10.1.155"
   },
-  "keywords": [],
-  "author": "Tyler van Hensbergen",
-  "license": "MIT",
   "directories": {
     "lib": "lib"
   },
