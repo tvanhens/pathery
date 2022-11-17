@@ -12,7 +12,7 @@ fn generate_id() -> String {
     id.to_string()
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IndexError {
     EmptyObject,
     NotJsonObject,
@@ -65,12 +65,12 @@ where
     let mut doc_obj = raw_doc.clone();
     let doc_obj = doc_obj
         .as_object_mut()
-        .ok_or_else(|| IndexError::NotJsonObject)?;
+        .ok_or(IndexError::NotJsonObject)?;
 
     let id = doc_obj
         .remove("__id")
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(|| generate_id());
+        .unwrap_or_else(generate_id);
 
     let id_field = schema.id_field();
 
@@ -87,7 +87,7 @@ where
         };
     }
 
-    if index_doc.len() < 1 {
+    if index_doc.is_empty() {
         // There are no fields that match the schema so the doc is empty
         return Err(IndexError::EmptyObject);
     }

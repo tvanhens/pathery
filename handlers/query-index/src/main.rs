@@ -73,10 +73,10 @@ where
                     doc_map.insert(field_name.to_string(), value);
 
                     let mut snippet_gen = SnippetGenerator::create(&searcher, &query, field)
-                        .expect(&format!("Unable to create snippet for field: {field_name}"));
+                        .unwrap_or_else(|_| panic!("Unable to create snippet for field: {field_name}"));
                     snippet_gen.set_max_num_chars(100);
                     let snippet_text = snippet_gen.snippet_from_doc(&search_doc).to_html();
-                    if snippet_text.len() > 0 {
+                    if !snippet_text.is_empty() {
                         snippets.insert(field_name.into(), snippet_text);
                     }
                 }

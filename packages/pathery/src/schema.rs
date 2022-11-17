@@ -84,7 +84,7 @@ impl SchemaLoader for DirSchemaLoader {
                                         TextFieldOption::TEXT => acc | schema::TEXT,
                                         TextFieldOption::STORED => acc | schema::STORED,
                                     });
-                            schema.add_text_field(&name, field_opts);
+                            schema.add_text_field(name, field_opts);
                         }
                     }
                 }

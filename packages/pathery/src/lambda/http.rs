@@ -49,7 +49,7 @@ impl PatheryRequest for http::Request {
         let params = self.path_parameters();
         let found = params
             .first(name)
-            .expect(&format!("Expected path param not found: [{name}]"));
+            .unwrap_or_else(|| panic!("Expected path param not found: [{name}]"));
         found.to_string()
     }
 
