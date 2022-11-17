@@ -1,4 +1,4 @@
-use pathery::index::{IndexLoader, LambdaIndexProvider, TantivyIndex};
+use pathery::index::{IndexLoader, IndexProvider, TantivyIndex};
 use pathery::lambda::lambda_runtime::{run, service_fn};
 use pathery::lambda::sqs;
 use pathery::lambda::*;
@@ -36,7 +36,7 @@ async fn main() -> Result<(), sqs::Error> {
         .without_time()
         .init();
 
-    let index_loader = &LambdaIndexProvider::create();
+    let index_loader = &IndexProvider::lambda();
 
     let handler = |event: sqs::SqsEvent| async move {
         let records = event.payload.records;

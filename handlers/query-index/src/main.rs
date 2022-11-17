@@ -1,4 +1,4 @@
-use pathery::index::{IndexLoader, LambdaIndexProvider};
+use pathery::index::{IndexLoader, IndexProvider};
 use pathery::json::Map;
 use pathery::lambda;
 use pathery::lambda::{http, http::PatheryRequest};
@@ -51,6 +51,7 @@ where
         &index,
         schema
             .fields()
+            .filter(|(_, config)| config.is_indexed())
             .map(|(field, _)| field)
             .collect::<Vec<Field>>(),
     );
@@ -66,14 +67,20 @@ where
             let mut doc_map = Map::new();
             let mut snippets: HashMap<String, String> = HashMap::new();
 
-            for (field, entry) in index.schema().fields() {
+            for (field, entry) in index
+                .schema()
+                .fields()
+                .filter(|(_, entry)| entry.is_indexed())
+            {
                 let field_name = entry.name();
                 if let Some(value) = search_doc.get_first(field) {
                     let value = json::to_value(value)?;
                     doc_map.insert(field_name.to_string(), value);
 
                     let mut snippet_gen = SnippetGenerator::create(&searcher, &query, field)
-                        .unwrap_or_else(|_| panic!("Unable to create snippet for field: {field_name}"));
+                        .unwrap_or_else(|_| {
+                            panic!("Unable to create snippet for field: {field_name}")
+                        });
                     snippet_gen.set_max_num_chars(100);
                     let snippet_text = snippet_gen.snippet_from_doc(&search_doc).to_html();
                     if !snippet_text.is_empty() {
@@ -101,7 +108,7 @@ async fn main() -> Result<(), http::Error> {
         .without_time()
         .init();
 
-    let index_loader = &LambdaIndexProvider::create();
+    let index_loader = &IndexProvider::lambda();
 
     let handler = |event: http::Request| async move {
         let index_id = event.required_path_param("index_id");
@@ -117,4 +124,38 @@ async fn main() -> Result<(), http::Error> {
     };
 
     http::run(http::service_fn(handler)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use pathery::index::TantivyIndex;
+    use pathery::tantivy::schema::Schema;
+    use pathery::tantivy::{doc, schema, Index};
+    use std::rc::Rc;
+
+    use super::*;
+
+    #[test]
+    fn query_document_with_un_indexed_fields() {
+        let mut schema = Schema::builder();
+        let title = schema.add_text_field("title", schema::STORED | schema::STRING);
+        let author = schema.add_text_field("author", schema::STORED);
+        let index = Index::create_in_ram(schema.build());
+        let mut writer = index.default_writer();
+
+        writer
+            .add_document(doc!(
+                title => "hello",
+                author => "world",
+            ))
+            .unwrap();
+
+        writer.commit().unwrap();
+
+        let results = search(&Rc::new(index), "test-index", "hello").unwrap();
+
+        println!("{results:?}");
+
+        assert_eq!(1, results.matches().len());
+    }
 }

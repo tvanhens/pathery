@@ -52,21 +52,26 @@ impl TantivySchema for Schema {
     }
 }
 
-pub struct DirSchemaLoader {
+pub struct SchemaProvider {
     config: PatheryConfig,
 }
 
-impl DirSchemaLoader {
-    pub fn create() -> Result<Self> {
+impl SchemaProvider {
+    pub fn lambda() -> Result<Self> {
         let config_path = "/opt/pathery/config.json";
         let content = fs::read_to_string(config_path)?;
         let config: PatheryConfig = json::from_str(&content)?;
 
-        Ok(DirSchemaLoader { config })
+        Ok(SchemaProvider { config })
+    }
+
+    pub fn test(config: json::Value) -> Self {
+        let config = json::from_value(config).expect("config should parse");
+        Self { config }
     }
 }
 
-impl SchemaLoader for DirSchemaLoader {
+impl SchemaLoader for SchemaProvider {
     fn load_schema(&self, index_id: &str) -> Schema {
         self.config
             .indexes

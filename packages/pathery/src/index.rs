@@ -1,28 +1,28 @@
 use crate::{
     directory::PatheryDirectory,
-    schema::{DirSchemaLoader, SchemaLoader},
+    schema::{SchemaLoader, SchemaProvider},
 };
-use std::{fs, path::Path};
+use std::{fs, path::Path, rc::Rc};
 use tantivy::{schema::Field, Index, IndexWriter};
 
 pub trait IndexLoader {
-    fn load_index(&self, index_id: &str) -> Index;
+    fn load_index(&self, index_id: &str) -> Rc<Index>;
 }
 
-pub struct LambdaIndexProvider {
-    schema_loader: DirSchemaLoader,
+pub struct IndexProvider {
+    schema_loader: SchemaProvider,
 }
 
-impl LambdaIndexProvider {
-    pub fn create() -> Self {
+impl IndexProvider {
+    pub fn lambda() -> Self {
         Self {
-            schema_loader: DirSchemaLoader::create().expect("SchemaLoader should create"),
+            schema_loader: SchemaProvider::lambda().expect("SchemaLoader should create"),
         }
     }
 }
 
-impl IndexLoader for LambdaIndexProvider {
-    fn load_index(&self, index_id: &str) -> Index {
+impl IndexLoader for IndexProvider {
+    fn load_index(&self, index_id: &str) -> Rc<Index> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let index = if let Ok(existing_dir) = PatheryDirectory::open(&directory_path) {
@@ -34,7 +34,14 @@ impl IndexLoader for LambdaIndexProvider {
                 .expect("Index should be creatable")
         };
 
-        index
+        Rc::new(index)
+    }
+}
+
+/// Used for testing purposes. Always returns the same Rc wrapped index.
+impl IndexLoader for Rc<Index> {
+    fn load_index(&self, _index_id: &str) -> Rc<Index> {
+        Rc::clone(self)
     }
 }
 
