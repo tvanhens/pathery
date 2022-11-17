@@ -1,5 +1,6 @@
 {
   "name": "@pathery/cdk",
+  "description": "AWS CDK Construct for Pathery Serverless Search.",
   "version": "0.0.3",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -29,6 +30,5 @@
   "bugs": {
     "url": "https://github.com/tvanhens/pathery/issues"
   },
-  "homepage": "https://github.com/tvanhens/pathery#readme",
-  "description": ""
+  "homepage": "https://github.com/tvanhens/pathery#readme"
 }

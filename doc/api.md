@@ -84,7 +84,7 @@ Request:
 
 ```bash
 http https://<api-id>.execute-api.us-east-1.amazonaws.com/prod/index/book-index-1/query \
-     query="Zen"
+     query="zen art"
 ```
 
 Response:
@@ -94,10 +94,13 @@ Response:
   "matches": [
     {
       "doc": {
-        "__id": "44764c78-1c94-4a03-9102-e2d9e3d9967b",
+        "__id": "ebf5c0a0-ca14-4471-bc21-5259d7898df3",
         "title": "Zen and the Art of Motorcycle Maintenance"
       },
-      "score": 0.28768211603164673
+      "score": 0.57536423,
+      "snippets": {
+        "title": "<b>Zen</b> and the <b>Art</b> of Motorcycle Maintenance"
+      }
     }
   ]
 }

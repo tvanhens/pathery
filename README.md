@@ -1,24 +1,25 @@
-# Pathery
+# Pathery :fire: Serverless Search :fire:
 
-Pathery is an **open source serverless search service** built on AWS using Rust, CDK and [Tantivy][tantivy].
+[![npm version](https://badge.fury.io/js/@pathery%2Fcdk.svg)](https://badge.fury.io/js/@pathery%2Fcdk)
 
-**Warning** This is currently a work in progress and not ready for real usage.
+Pathery is a **serverless search service** built on AWS using Rust, CDK and [Tantivy][tantivy].
 
-## Design
+**:bell: WARNING:** This is currently a work in progress and not ready for production usage.
 
-Pathery uses AWS DynamoDB for storage and AWS Lambda for code execution.
-As a result, it is entirely usage-based and does not require any long-running server.
+## Features
 
-Rather than using the filesystem, pathery implements a [DynamoDB-backed][dynamodb-dir] Tantivy Directory - this limits any cold start overhead a VPC would introduce.
-This makes it possible to spin up dozens of lambdas in parallel to execute distributed queries across all the segments in an index with minimal overhead.
-
-## Todo
-
-- [ ] Allow indexes to be configured at runtime
-- [ ] Distributed queries
-- [ ] Coordination for indexing
-- [ ] Package and distrubute as a CDK Construct
-- [ ] Cleanup indexing and query APIs
+- **🔥 Fast full-text search** - Pathery is built on Rust to limit its AWS Lambda cold start overhead.
+- **🥰 Simple REST API** - Pathery exposes a [simple REST API][api-docs] to make search as easy as possible.
+- **👍 Easy to install** - Pathery ships as a CDK Component making it easy to [get started][get-started].
+- **💵 Usage based** - Pathery has no long running servers, only pay for what you use.
+- **🔼 Built for AWS** - Pathery leans on AWS managed services to limit its maintenance burden and maximize its scalability.
 
 [tantivy]: https://github.com/quickwit-oss/tantivy
-[dynamodb-dir]: packages/pathery/src/directory/mod.rs
+[get-started]: ./doc/get-started.md
+[api-docs]: ./doc/api.md
+
+## Getting Started
+
+Check out the [getting started guide][getting-started] to deploy Pathery into your AWS account using CDK.
+
+[getting-started]: ./doc/get-started.md
