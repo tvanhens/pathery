@@ -1,5 +1,8 @@
 {
   "name": "@pathery/cdk",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.0.5",
   "license": "MIT",
   "description": "AWS CDK Construct for Pathery Serverless Search.",
