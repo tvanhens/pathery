@@ -14,12 +14,10 @@ Pathery is a **serverless search service** built on AWS using Rust, CDK and [Tan
 - **💵 Usage based** - Pathery has no long running servers, only pay for what you use.
 - **🔼 Built for AWS** - Pathery leans on AWS managed services to limit its maintenance burden and maximize its scalability.
 
-[tantivy]: https://github.com/quickwit-oss/tantivy
-[get-started]: ./doc/get-started.md
-[api-docs]: ./doc/api.md
-
 ## Getting Started
 
 Check out the [getting started guide][get-started] to deploy Pathery into your AWS account using CDK.
 
+[tantivy]: https://github.com/quickwit-oss/tantivy
 [get-started]: ./examples/getting-started/
+[api-docs]: ./doc/api.md
