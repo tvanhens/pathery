@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.6
+
+### Patch Changes
+
+- bf29fa3: Fixes #1
+
 ## 0.0.5
 
 ### Patch Changes
