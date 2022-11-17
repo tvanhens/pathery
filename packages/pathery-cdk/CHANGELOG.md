@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- bf29fa3: Fixes #1
+- bf29fa3: Fixes https://github.com/tvanhens/pathery/issues/1
 
 ## 0.0.5
 
