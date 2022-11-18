@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.7
+
+### Patch Changes
+
+- 903af06: Add basic dashboard with errors and writer stats
+
 ## 0.0.6
 
 ### Patch Changes
