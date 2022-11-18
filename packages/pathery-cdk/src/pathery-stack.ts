@@ -120,7 +120,7 @@ export class PatheryStack extends Stack {
 
     documentSingleRoute.addMethod("DELETE", new LambdaIntegration(deleteDoc));
 
-    new PatheryDashboard(this, "Dashboard2", {
+    new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,
     });
   }

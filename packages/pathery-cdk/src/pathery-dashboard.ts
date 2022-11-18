@@ -20,12 +20,14 @@ export class PatheryDashboard extends Construct {
   constructor(scope: Construct, id: string, props: PatheryDashboardProps) {
     super(scope, id);
 
+    let stack = Stack.of(this);
+
     const dashboard = new Dashboard(this, "Resource", {
-      dashboardName: `Pathery-${id}-2`,
+      dashboardName: `Pathery-${stack.stackName}`,
     });
 
-    let functions = Stack.of(this)
-      .node.findAll()
+    let functions = stack.node
+      .findAll()
       .filter((c): c is RustFunction => c instanceof RustFunction);
 
     let successRate = new MathExpression({
