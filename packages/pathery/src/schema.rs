@@ -65,7 +65,7 @@ impl SchemaProvider {
         Ok(SchemaProvider { config })
     }
 
-    pub fn test(config: json::Value) -> Self {
+    pub fn from_json(config: json::Value) -> Self {
         let config = json::from_value(config).expect("config should parse");
         Self { config }
     }
@@ -105,25 +105,6 @@ impl SchemaLoader for SchemaProvider {
             })
             .expect("schema definition should exist")
     }
-}
-
-pub struct TestSchemaLoader {}
-
-impl SchemaLoader for TestSchemaLoader {
-    fn load_schema(&self, _index_id: &str) -> Schema {
-        let mut schema = Schema::builder();
-
-        schema.add_text_field("__id", schema::STRING | schema::STORED);
-        schema.add_text_field("author", schema::TEXT | schema::STORED);
-        schema.add_text_field("title", schema::TEXT | schema::STORED);
-        schema.add_text_field("body", schema::TEXT | schema::STORED);
-
-        schema.build()
-    }
-}
-
-pub fn test_schema_loader() -> TestSchemaLoader {
-    TestSchemaLoader {}
 }
 
 #[cfg(test)]
