@@ -110,11 +110,30 @@ mod tests {
     use super::*;
     use pathery::{
         message::{test_writer_sender, TestWriterSender},
-        schema::{test_schema_loader, TestSchemaLoader},
+        schema::SchemaProvider,
         tokio,
     };
-    fn setup() -> (TestWriterSender, TestSchemaLoader) {
-        (test_writer_sender(), test_schema_loader())
+    fn setup() -> (TestWriterSender, SchemaProvider) {
+        let config = json::json!({
+            "indexes": [
+                {
+                    "prefix": "test",
+                    "fields": [
+                        {
+                            "name": "title",
+                            "kind": "text",
+                            "flags": ["TEXT"]
+                        },
+                        {
+                            "name": "author",
+                            "kind": "text",
+                            "flags": ["TEXT"]
+                        }
+                    ]
+                }
+            ]
+        });
+        (test_writer_sender(), SchemaProvider::from_json(config))
     }
 
     // Happy Path
