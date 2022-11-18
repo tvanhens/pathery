@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.8
+
+### Patch Changes
+
+- 38a8116: Fix: incorrect dashboard naming
+
 ## 0.0.7
 
 ### Patch Changes
