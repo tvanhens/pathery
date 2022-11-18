@@ -2,27 +2,15 @@ import { Stack, aws_lambda } from "aws-cdk-lib";
 import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { SubnetType, Vpc } from "aws-cdk-lib/aws-ec2";
 import { FileSystem } from "aws-cdk-lib/aws-efs";
-import { FunctionProps, LayerVersion } from "aws-cdk-lib/aws-lambda";
-import { Architecture, Code, Function, Runtime } from "aws-cdk-lib/aws-lambda";
+import { LayerVersion } from "aws-cdk-lib/aws-lambda";
+import { Architecture, Code, Runtime } from "aws-cdk-lib/aws-lambda";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { PatheryConfig } from "./config";
-import * as path from "path";
 import * as fs from "fs";
-
-class RustFunction extends Function {
-  constructor(scope: Construct, id: string, props?: Partial<FunctionProps>) {
-    const lambdaAssetPath = path.join(__dirname, "..", "target", id);
-    super(scope, id, {
-      ...props,
-      code: Code.fromAsset(lambdaAssetPath),
-      handler: "default",
-      runtime: Runtime.PROVIDED_AL2,
-      architecture: Architecture.ARM_64,
-    });
-  }
-}
+import { RustFunction } from "./rust-function";
+import { PatheryDashboard } from "./pathery-dashboard";
 
 export interface PatheryStackProps {
   config: PatheryConfig;
@@ -108,7 +96,11 @@ export class PatheryStack extends Stack {
       ),
     });
     indexWriterWorker.addLayers(configLayer);
-    indexWriterWorker.addEventSource(new SqsEventSource(indexWriterQueue));
+    indexWriterWorker.addEventSource(
+      new SqsEventSource(indexWriterQueue, {
+        batchSize: 10,
+      })
+    );
 
     const api = new RestApi(this, "PatheryApi");
 
@@ -127,5 +119,9 @@ export class PatheryStack extends Stack {
     const documentSingleRoute = documentRoute.addResource("{doc_id}");
 
     documentSingleRoute.addMethod("DELETE", new LambdaIntegration(deleteDoc));
+
+    new PatheryDashboard(this, "Dashboard2", {
+      indexWriterWorker,
+    });
   }
 }

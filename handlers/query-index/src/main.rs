@@ -102,11 +102,7 @@ where
 
 #[tokio::main]
 async fn main() -> Result<(), http::Error> {
-    lambda::tracing_subscriber::fmt()
-        .with_max_level(lambda::tracing::Level::INFO)
-        .with_target(false)
-        .without_time()
-        .init();
+    lambda::init_tracing();
 
     let index_loader = &IndexProvider::lambda();
 

@@ -1,3 +1,4 @@
 {
-  "app": "ts-node --swc src/app.ts"
+  "app": "ts-node --swc src/app.ts",
+  "profile": "pathery-dev"
 }

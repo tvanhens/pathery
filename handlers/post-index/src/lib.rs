@@ -1,10 +1,12 @@
 use pathery::chrono::{DateTime, Utc};
 use pathery::json::Value;
 use pathery::lambda::http;
+use pathery::lambda::tracing;
 use pathery::message::{WriterMessage, WriterSender};
 use pathery::schema::{SchemaLoader, TantivySchema};
 use pathery::tantivy::Document;
 use pathery::{json, serde, uuid};
+use std::fmt::Debug;
 use std::time::SystemTime;
 
 fn generate_id() -> String {
@@ -50,6 +52,7 @@ impl PostIndexResponse {
     }
 }
 
+#[tracing::instrument(skip(client, schema_loader, raw_doc))]
 pub async fn index_doc<C, L>(
     client: &C,
     schema_loader: &L,
@@ -63,9 +66,7 @@ where
     let schema = schema_loader.load_schema(index_id);
 
     let mut doc_obj = raw_doc.clone();
-    let doc_obj = doc_obj
-        .as_object_mut()
-        .ok_or(IndexError::NotJsonObject)?;
+    let doc_obj = doc_obj.as_object_mut().ok_or(IndexError::NotJsonObject)?;
 
     let id = doc_obj
         .remove("__id")
@@ -112,7 +113,6 @@ mod tests {
         schema::{test_schema_loader, TestSchemaLoader},
         tokio,
     };
-
     fn setup() -> (TestWriterSender, TestSchemaLoader) {
         (test_writer_sender(), test_schema_loader())
     }

@@ -6,11 +6,7 @@ use post_index::{index_doc, PostIndexResponse};
 
 #[tokio::main]
 async fn main() -> Result<(), http::Error> {
-    lambda::tracing_subscriber::fmt()
-        .with_max_level(lambda::tracing::Level::INFO)
-        .with_target(false)
-        .without_time()
-        .init();
+    lambda::init_tracing();
 
     let client = &lambda_writer_sender().await;
     let schema_loader = &SchemaProvider::lambda().expect("DirSchema loader should create");

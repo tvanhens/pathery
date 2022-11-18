@@ -1,7 +1,7 @@
 use pathery::index::{IndexLoader, IndexProvider, TantivyIndex};
 use pathery::lambda::lambda_runtime::{run, service_fn};
 use pathery::lambda::sqs;
-use pathery::lambda::*;
+use pathery::lambda::{self, tracing};
 use pathery::message::{WriterMessage, WriterMessageDetail};
 use pathery::tantivy::{Document, IndexWriter, Term};
 use pathery::{json, tokio};
@@ -12,6 +12,7 @@ pub fn delete_doc(writer: &IndexWriter, doc_id: &str) {
     let id_field = index.id_field();
 
     writer.delete_term(Term::from_field_text(id_field, doc_id));
+    tracing::info!(message = "doc_deleted", doc_id);
 }
 
 pub fn index_doc(writer: &IndexWriter, doc: Document) {
@@ -20,21 +21,19 @@ pub fn index_doc(writer: &IndexWriter, doc: Document) {
     let doc_id = doc
         .get_first(id_field)
         .and_then(|id| id.as_text())
-        .expect("__id field should be present");
+        .expect("__id field should be present")
+        .to_string();
 
-    delete_doc(writer, doc_id);
+    delete_doc(writer, &doc_id);
     writer
         .add_document(doc)
         .expect("Adding a document should not error");
+    tracing::info!(message = "doc_indexed", doc_id);
 }
 
 #[tokio::main]
 async fn main() -> Result<(), sqs::Error> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_target(false)
-        .without_time()
-        .init();
+    lambda::init_tracing();
 
     let index_loader = &IndexProvider::lambda();
 
@@ -64,9 +63,10 @@ async fn main() -> Result<(), sqs::Error> {
             }
         }
 
-        for (_index_id, writer) in writers.into_iter() {
+        for (index_id, writer) in writers.into_iter() {
             let mut writer = writer;
             writer.commit().expect("commit should succeed");
+            tracing::info!(message = "index_committed", index_id);
             writer
                 .wait_merging_threads()
                 .expect("merge should finish without error");

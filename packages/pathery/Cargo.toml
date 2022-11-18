@@ -18,5 +18,5 @@ tantivy = "0.18.1"
 tantivy-common = "0.3.0"
 tokio = { version = "1", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }
 uuid = "1.2.1"

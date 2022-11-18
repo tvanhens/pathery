@@ -1,5 +1,5 @@
 use pathery::chrono::{DateTime, Utc};
-use pathery::lambda::{http, http::PatheryRequest, tracing, tracing_subscriber};
+use pathery::lambda::{self, http, http::PatheryRequest};
 use pathery::message::{lambda_writer_sender, WriterMessage, WriterSender};
 use pathery::{serde, tokio};
 use std::time::SystemTime;
@@ -34,11 +34,7 @@ where
 
 #[tokio::main]
 async fn main() -> Result<(), http::Error> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_target(false)
-        .without_time()
-        .init();
+    lambda::init_tracing();
 
     let client = &lambda_writer_sender().await;
 
