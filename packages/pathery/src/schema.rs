@@ -17,7 +17,6 @@ pub enum FieldKindConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "kind")]
 pub enum FieldConfig {
     #[serde(rename = "text")]
     TextFieldConfig {
@@ -37,7 +36,7 @@ pub struct PatheryConfig {
     indexes: Vec<IndexConfig>,
 }
 
-pub trait SchemaLoader {
+pub trait SchemaLoader: Send + Sync {
     fn load_schema(&self, index_id: &str) -> Schema;
 }
 

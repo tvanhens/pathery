@@ -35,7 +35,7 @@ impl WriterMessage {
 }
 
 #[async_trait]
-pub trait WriterSender {
+pub trait WriterSender: Send + Sync {
     async fn send_message(&self, group_id: &str, message: &WriterMessage);
 }
 
