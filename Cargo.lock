@@ -1424,6 +1424,7 @@ dependencies = [
  "aws-sdk-sqs",
  "aws_lambda_events",
  "chrono",
+ "http",
  "lambda_http",
  "lambda_runtime",
  "serde",

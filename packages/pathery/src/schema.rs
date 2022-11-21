@@ -17,6 +17,7 @@ pub enum FieldKindConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "kind")]
 pub enum FieldConfig {
     #[serde(rename = "text")]
     TextFieldConfig {
@@ -72,37 +73,37 @@ impl SchemaProvider {
 
 impl SchemaLoader for SchemaProvider {
     fn load_schema(&self, index_id: &str) -> Schema {
-        self.config
+        let config = self
+            .config
             .indexes
             .iter()
             .find(|config| index_id.starts_with(&config.prefix))
-            .map(|config| {
-                let mut schema = Schema::builder();
+            .expect("schema definition should exist");
 
-                for field in &config.fields {
-                    match &field {
-                        FieldConfig::TextFieldConfig { name, flags } => {
-                            let field_opts =
-                                flags
-                                    .iter()
-                                    .fold(TextOptions::default(), |acc, opt| match opt {
-                                        TextFieldOption::TEXT => acc | schema::TEXT,
-                                        TextFieldOption::STORED => acc | schema::STORED,
-                                        TextFieldOption::STRING => acc | schema::STRING,
-                                    });
-                            schema.add_text_field(name, field_opts);
-                        }
-                    }
+        let mut schema = Schema::builder();
+
+        for field in &config.fields {
+            match &field {
+                FieldConfig::TextFieldConfig { name, flags } => {
+                    let field_opts =
+                        flags
+                            .iter()
+                            .fold(TextOptions::default(), |acc, opt| match opt {
+                                TextFieldOption::TEXT => acc | schema::TEXT,
+                                TextFieldOption::STORED => acc | schema::STORED,
+                                TextFieldOption::STRING => acc | schema::STRING,
+                            });
+                    schema.add_text_field(name, field_opts);
                 }
+            }
+        }
 
-                // Add system schema fields
+        // Add system schema fields
 
-                // __id is the document id used for uniqueness
-                schema.add_text_field("__id", schema::STRING | schema::STORED);
+        // __id is the document id used for uniqueness
+        schema.add_text_field("__id", schema::STRING | schema::STORED);
 
-                schema.build()
-            })
-            .expect("schema definition should exist")
+        schema.build()
     }
 }
 
