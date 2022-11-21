@@ -200,7 +200,6 @@ mod tests {
     use crate::index::TantivyIndex;
     use crate::message::{test_writer_sender, TestWriterSender};
     use crate::schema::SchemaProvider;
-    use crate::tokio;
 
     fn setup() -> (TestWriterSender, SchemaProvider) {
         let config = json::json!({
