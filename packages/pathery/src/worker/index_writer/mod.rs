@@ -1,11 +1,14 @@
+pub mod client;
+pub mod op;
+
 use std::collections::HashMap;
 
 use serde_json as json;
 use tantivy::{Document, IndexWriter, Term};
 
+use self::op::{IndexWriterOp, WriterMessageDetail};
 use crate::index::{IndexLoader, TantivyIndex};
 use crate::lambda::{self, sqs};
-use crate::message::{WriterMessage, WriterMessageDetail};
 
 pub fn delete_doc(writer: &IndexWriter, doc_id: &str) {
     let index = writer.index();
@@ -41,7 +44,7 @@ pub async fn handle_event(
         .iter()
         .map(|message| message.body.as_ref().expect("Body should be present"))
         .map(|body| {
-            let msg = json::from_str::<WriterMessage>(body.as_str())
+            let msg = json::from_str::<IndexWriterOp>(body.as_str())
                 .expect("Message should be deserializable");
             msg
         })
