@@ -5,6 +5,7 @@ pub mod message;
 pub mod schema;
 pub mod service;
 pub mod util;
+pub mod worker;
 
 pub use anyhow;
 pub use chrono;
