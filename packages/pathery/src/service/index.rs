@@ -9,37 +9,42 @@ use std::time::SystemTime;
 use tantivy::Document;
 use tracing;
 
+trait IndexResourceRequest {
+    fn index_id(&self) -> String;
+}
+
+impl IndexResourceRequest for http::Request {
+    fn index_id(&self) -> String {
+        self.required_path_param("index_id")
+    }
+}
+
 fn generate_id() -> String {
     let id = uuid::Uuid::new_v4();
     id.to_string()
 }
 
+fn timestamp() -> String {
+    let now = SystemTime::now();
+    let now: DateTime<Utc> = now.into();
+    now.to_rfc3339()
+}
+
 #[derive(serde::Serialize)]
-#[serde(crate = "self::serde")]
 pub struct PostIndexResponse {
     #[serde(rename = "__id")]
-    doc_id: String,
-    updated_at: String,
+    pub doc_id: String,
+    pub updated_at: String,
 }
 
-impl PostIndexResponse {
-    pub fn new(doc_id: &str) -> PostIndexResponse {
-        let now = SystemTime::now();
-        let now: DateTime<Utc> = now.into();
-        PostIndexResponse {
-            doc_id: doc_id.to_string(),
-            updated_at: now.to_rfc3339(),
-        }
-    }
-}
-
+// Indexes a document supplied via a JSON object in the body.
 #[tracing::instrument(skip(writer_client, schema_loader))]
 pub async fn post_index(
     writer_client: &dyn WriterSender,
     schema_loader: &dyn SchemaLoader,
     request: http::Request,
 ) -> Result<http::Response<http::Body>, http::Error> {
-    let index_id = request.required_path_param("index_id");
+    let index_id = request.index_id();
 
     let mut payload = match request.payload::<json::Value>() {
         Ok(v) => v,
@@ -88,7 +93,10 @@ pub async fn post_index(
         )
         .await;
 
-    http::success(&PostIndexResponse::new(&doc_id))
+    http::success(&PostIndexResponse {
+        doc_id,
+        updated_at: timestamp(),
+    })
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ where
         .expect("Failed to build response"))
 }
 
+#[derive(Debug)]
 pub enum PatheryHttpError {
     MissingBody,
 }
