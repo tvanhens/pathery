@@ -1039,13 +1039,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "index-writer-worker"
-version = "0.1.0"
-dependencies = [
- "pathery",
-]
-
-[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
