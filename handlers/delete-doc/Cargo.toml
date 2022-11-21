@@ -1,7 +1,0 @@
-[package]
-name = "delete-doc"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-pathery = { path = "../../packages/pathery" }
