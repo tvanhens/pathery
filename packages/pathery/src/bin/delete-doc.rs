@@ -1,4 +1,5 @@
 use pathery::lambda;
+use pathery::lambda::http::HttpRequest;
 use pathery::service::doc::delete_doc;
 use pathery::worker::index_writer::client::index_writer_client;
 
@@ -8,5 +9,8 @@ async fn main() -> Result<(), lambda_http::Error> {
 
     let client = index_writer_client().await;
 
-    lambda_http::run(lambda_http::service_fn(|event| delete_doc(&client, event))).await
+    lambda_http::run(lambda_http::service_fn(|event: HttpRequest| {
+        delete_doc(&client, event.into())
+    }))
+    .await
 }

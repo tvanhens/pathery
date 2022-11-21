@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use json::Map;
 use lambda_http::{self as http, Body, RequestExt, Response};
 use serde::{Deserialize, Serialize};
 use serde_json as json;
@@ -25,41 +28,64 @@ where V: Serialize {
 }
 
 #[derive(Debug)]
-pub enum PatheryHttpError {
-    MissingBody,
+pub struct ServiceRequest<B, P> {
+    request: http::Request,
+    body: PhantomData<B>,
+    path_params: PhantomData<P>,
 }
 
-impl From<PatheryHttpError> for Result<http::Response<http::Body>, http::Error> {
-    fn from(err: PatheryHttpError) -> Self {
-        match err {
-            PatheryHttpError::MissingBody => Ok(err_response(400, "Missing body")),
-        }
+impl<B, P> ServiceRequest<B, P>
+where
+    P: for<'de> Deserialize<'de>,
+    B: for<'de> Deserialize<'de>,
+{
+    fn load_params(&self) -> Result<P, HandlerResponse> {
+        let path_params = json::to_value(self.request.path_parameters())
+            .expect("path_params should be serializable");
+
+        let params_object = if let json::Value::Object(obj) = path_params {
+            obj
+        } else {
+            panic!("path_params should be an object")
+        };
+
+        let flattened: Map<String, json::Value> = params_object
+            .into_iter()
+            .map(|(k, v)| match v {
+                json::Value::Array(values) => (
+                    k,
+                    values
+                        .into_iter()
+                        .nth(0)
+                        .expect("param should have a value"),
+                ),
+                _ => panic!("keys should be array values"),
+            })
+            .collect();
+
+        Ok(json::from_value(flattened.into()).unwrap())
+    }
+
+    fn load_body(&self) -> Result<B, HandlerResponse> {
+        self.request
+            .payload::<B>()
+            .map_err(|err| panic!("{:?}", err))
+            .and_then(|payload| payload.ok_or_else(|| err_response(400, "Missing body")))
+    }
+
+    pub fn into_parts(&self) -> Result<(B, P), HandlerResponse> {
+        let body = self.load_body()?;
+        let params = self.load_params()?;
+        Ok((body, params))
     }
 }
 
-pub trait PatheryRequest {
-    fn required_path_param(&self, name: &str) -> String;
-    fn payload<T>(&self) -> Result<T, PatheryHttpError>
-    where T: for<'de> Deserialize<'de>;
-}
-
-impl PatheryRequest for http::Request {
-    fn required_path_param(&self, name: &str) -> String {
-        let params = self.path_parameters();
-        let found = params
-            .first(name)
-            .unwrap_or_else(|| panic!("Expected path param not found: [{name}]"));
-        found.to_string()
-    }
-
-    fn payload<T>(&self) -> Result<T, PatheryHttpError>
-    where T: for<'de> Deserialize<'de> {
-        let payload = RequestExt::payload::<T>(self);
-
-        match payload {
-            Ok(Some(v)) => Ok(v),
-            Ok(None) => Err(PatheryHttpError::MissingBody),
-            Err(_) => todo!(),
+impl<B, P> From<http::Request> for ServiceRequest<B, P> {
+    fn from(request: http::Request) -> Self {
+        ServiceRequest {
+            request,
+            body: PhantomData::default(),
+            path_params: PhantomData::default(),
         }
     }
 }
