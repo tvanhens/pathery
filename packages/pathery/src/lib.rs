@@ -3,6 +3,7 @@ pub mod index;
 pub mod lambda;
 pub mod message;
 pub mod schema;
+pub mod service;
 
 pub use anyhow;
 pub use chrono;
