@@ -7,7 +7,7 @@ use super::IndexWriterOp;
 
 #[async_trait]
 pub trait IndexWriterClient: Send + Sync {
-    async fn send_message(&self, group_id: &str, message: IndexWriterOp);
+    async fn send_message(&self, message: IndexWriterOp);
 }
 
 pub struct AWSIndexWriterClient {
@@ -17,12 +17,12 @@ pub struct AWSIndexWriterClient {
 
 #[async_trait]
 impl IndexWriterClient for AWSIndexWriterClient {
-    async fn send_message(&self, group_id: &str, message: IndexWriterOp) {
+    async fn send_message(&self, message: IndexWriterOp) {
         self.client
             .send_message()
             .queue_url(&self.queue_url)
-            .message_group_id(group_id)
             .message_body(json::to_string(&message).expect("Message should serialize"))
+            .message_group_id(message.index_id)
             .send()
             .await
             .expect("send_message should not fail");
@@ -47,7 +47,7 @@ struct TestIndexWriterClient {
 #[cfg(test)]
 #[async_trait]
 impl IndexWriterClient for TestIndexWriterClient {
-    async fn send_message(&self, _group_id: &str, message: IndexWriterOp) {
+    async fn send_message(&self, message: IndexWriterOp) {
         let mut ops = self.ops.lock().unwrap();
         (*ops).push(message);
     }

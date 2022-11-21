@@ -83,10 +83,7 @@ pub async fn post_index(
     index_doc.add_text(id_field, &doc_id);
 
     writer_client
-        .send_message(
-            &index_id,
-            IndexWriterOp::index_single_doc(&index_id, index_doc),
-        )
+        .send_message(IndexWriterOp::index_single_doc(&index_id, index_doc))
         .await;
 
     http::success(&PostIndexResponse {
