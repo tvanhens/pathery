@@ -1,4 +1,4 @@
-use crate::lambda::http;
+use crate::lambda::http::{self, PatheryRequest};
 use crate::message::{WriterMessage, WriterSender};
 use crate::schema::{SchemaLoader, TantivySchema};
 use chrono::{DateTime, Utc};
@@ -53,17 +53,33 @@ impl PostIndexResponse {
     }
 }
 
+pub async fn post_index(
+    writer_client: &dyn WriterSender,
+    schema_loader: &dyn SchemaLoader,
+    request: http::Request,
+) -> Result<http::Response<http::Body>, http::Error> {
+    let index_id = request.required_path_param("index_id");
+
+    let payload = match request.payload::<json::Value>() {
+        Ok(v) => v,
+        Err(err) => return err.into(),
+    };
+
+    let doc_id = match index_doc(writer_client, schema_loader, &index_id, &payload).await {
+        Ok(v) => v,
+        Err(err) => return err.into(),
+    };
+
+    http::success(&PostIndexResponse::new(&doc_id))
+}
+
 #[tracing::instrument(skip(client, schema_loader, raw_doc))]
-pub async fn index_doc<C, L>(
-    client: &C,
-    schema_loader: &L,
+pub async fn index_doc(
+    client: &dyn WriterSender,
+    schema_loader: &dyn SchemaLoader,
     index_id: &str,
     raw_doc: &json::Value,
-) -> Result<String, IndexError>
-where
-    C: WriterSender,
-    L: SchemaLoader,
-{
+) -> Result<String, IndexError> {
     let schema = schema_loader.load_schema(index_id);
 
     let mut doc_obj = raw_doc.clone();
