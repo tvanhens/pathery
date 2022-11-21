@@ -10,20 +10,15 @@ use tantivy::{DocAddress, Document, Score, SnippetGenerator};
 use {serde_json as json, tracing};
 
 use crate::index::IndexLoader;
-use crate::lambda::http::{self, HandlerResult, HttpRequest, PatheryRequest};
+use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::schema::{SchemaLoader, TantivySchema};
 use crate::util;
 use crate::worker::index_writer::client::IndexWriterClient;
 use crate::worker::index_writer::op::IndexWriterOp;
 
-trait IndexResourceRequest {
-    fn index_id(&self) -> String;
-}
-
-impl IndexResourceRequest for HttpRequest {
-    fn index_id(&self) -> String {
-        self.required_path_param("index_id")
-    }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PathParams {
+    index_id: String,
 }
 
 #[derive(Serialize)]
@@ -38,18 +33,16 @@ pub struct PostIndexResponse {
 pub async fn post_index(
     writer_client: &dyn IndexWriterClient,
     schema_loader: &dyn SchemaLoader,
-    request: HttpRequest,
+    request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {
-    let index_id = request.index_id();
-
-    let mut payload = match request.payload::<json::Value>() {
-        Ok(v) => v,
-        Err(err) => return err.into(),
+    let (mut body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
     };
 
-    let schema = schema_loader.load_schema(&index_id);
+    let schema = schema_loader.load_schema(&path_params.index_id);
 
-    let doc_obj = if let Some(obj) = payload.as_object_mut() {
+    let doc_obj = if let Some(obj) = body.as_object_mut() {
         obj
     } else {
         return Ok(http::err_response(400, "Expected a JSON object"));
@@ -83,7 +76,10 @@ pub async fn post_index(
     index_doc.add_text(id_field, &doc_id);
 
     writer_client
-        .send_message(IndexWriterOp::index_single_doc(&index_id, index_doc))
+        .send_message(IndexWriterOp::index_single_doc(
+            &path_params.index_id,
+            index_doc,
+        ))
         .await;
 
     http::success(&PostIndexResponse {
@@ -109,15 +105,16 @@ pub struct QueryResponse {
     pub matches: Vec<SearchHit>,
 }
 
-pub async fn query_index(index_loader: &dyn IndexLoader, request: HttpRequest) -> HandlerResult {
-    let index_id = request.index_id();
-
-    let payload = match request.payload::<QueryRequest>() {
-        Ok(value) => value,
-        Err(err) => return err.into(),
+pub async fn query_index(
+    index_loader: &dyn IndexLoader,
+    request: ServiceRequest<QueryRequest, PathParams>,
+) -> HandlerResult {
+    let (body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
     };
 
-    let index = index_loader.load_index(&index_id);
+    let index = index_loader.load_index(&path_params.index_id);
 
     let reader = index.reader().expect("Reader should load");
 
@@ -134,7 +131,7 @@ pub async fn query_index(index_loader: &dyn IndexLoader, request: HttpRequest) -
             .collect::<Vec<Field>>(),
     );
 
-    let query = query_parser.parse_query(&payload.query)?;
+    let query = query_parser.parse_query(&body.query)?;
 
     let top_docs: Vec<(Score, DocAddress)> = searcher.search(&query, &TopDocs::with_limit(10))?;
 
@@ -193,7 +190,7 @@ mod tests {
 
     use super::*;
     use crate::index::TantivyIndex;
-    use crate::lambda::http::HandlerResponse;
+    use crate::lambda::http::{HandlerResponse, HttpRequest};
     use crate::schema::SchemaProvider;
     use crate::worker::index_writer::client::test_index_writer_client;
 
@@ -223,15 +220,18 @@ mod tests {
         )
     }
 
-    fn request(index_id: &str, body: json::Value) -> HttpRequest {
+    fn request<B>(index_id: &str, body: B) -> ServiceRequest<B, PathParams>
+    where B: Serialize {
         let request: HttpRequest = Request::builder()
             .header("Content-Type", "application/json")
             .body(json::to_string(&body).expect("should serialize").into())
             .expect("should build request");
 
-        request.with_path_parameters::<QueryMap>(
-            HashMap::from([(String::from("index_id"), String::from(index_id))]).into(),
-        )
+        request
+            .with_path_parameters::<QueryMap>(
+                HashMap::from([(String::from("index_id"), String::from(index_id))]).into(),
+            )
+            .into()
     }
 
     fn parse_response<V>(response: HandlerResponse) -> (StatusCode, V)
@@ -337,9 +337,9 @@ mod tests {
 
         let request = request(
             "test",
-            json::json!({
-                "query": "hello"
-            }),
+            QueryRequest {
+                query: String::from("hello"),
+            },
         );
 
         let response = query_index(&Arc::new(index), request).await.unwrap();
