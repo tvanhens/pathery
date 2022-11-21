@@ -5,7 +5,6 @@ use chrono::{DateTime, Utc};
 use serde;
 use serde_json as json;
 use serde_json::Value;
-use std::fmt::Debug;
 use std::time::SystemTime;
 use tantivy::Document;
 use tracing;
@@ -13,25 +12,6 @@ use tracing;
 fn generate_id() -> String {
     let id = uuid::Uuid::new_v4();
     id.to_string()
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum IndexError {
-    EmptyObject,
-    NotJsonObject,
-    UnsupportedJsonValue,
-}
-
-impl From<IndexError> for Result<http::Response<http::Body>, http::Error> {
-    fn from(err: IndexError) -> Self {
-        match err {
-            IndexError::EmptyObject => Ok(http::err_response(400, "Cannot index empty object")),
-            IndexError::NotJsonObject => Ok(http::err_response(400, "Expected a JSON object")),
-            IndexError::UnsupportedJsonValue => {
-                Ok(http::err_response(400, "Unsupported JSON value in object"))
-            }
-        }
-    }
 }
 
 #[derive(serde::Serialize)]
@@ -61,31 +41,20 @@ pub async fn post_index(
 ) -> Result<http::Response<http::Body>, http::Error> {
     let index_id = request.required_path_param("index_id");
 
-    let payload = match request.payload::<json::Value>() {
+    let mut payload = match request.payload::<json::Value>() {
         Ok(v) => v,
         Err(err) => return err.into(),
     };
 
-    let doc_id = match index_doc(writer_client, schema_loader, &index_id, &payload).await {
-        Ok(v) => v,
-        Err(err) => return err.into(),
+    let schema = schema_loader.load_schema(&index_id);
+
+    let doc_obj = if let Some(obj) = payload.as_object_mut() {
+        obj
+    } else {
+        return Ok(http::err_response(400, "Expected a JSON object"));
     };
 
-    http::success(&PostIndexResponse::new(&doc_id))
-}
-
-async fn index_doc(
-    client: &dyn WriterSender,
-    schema_loader: &dyn SchemaLoader,
-    index_id: &str,
-    raw_doc: &json::Value,
-) -> Result<String, IndexError> {
-    let schema = schema_loader.load_schema(index_id);
-
-    let mut doc_obj = raw_doc.clone();
-    let doc_obj = doc_obj.as_object_mut().ok_or(IndexError::NotJsonObject)?;
-
-    let id = doc_obj
+    let doc_id = doc_obj
         .remove("__id")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or_else(generate_id);
@@ -101,25 +70,25 @@ async fn index_doc(
                     index_doc.add_text(field, v);
                 }
             }
-            _ => return Err(IndexError::UnsupportedJsonValue),
+            _ => return Ok(http::err_response(400, "Unsupported JSON value in object")),
         };
     }
 
     if index_doc.is_empty() {
         // There are no fields that match the schema so the doc is empty
-        return Err(IndexError::EmptyObject);
+        return Ok(http::err_response(400, "Cannot index empty object"));
     }
 
-    index_doc.add_text(id_field, &id);
+    index_doc.add_text(id_field, &doc_id);
 
-    client
+    writer_client
         .send_message(
-            index_id,
-            &WriterMessage::index_single_doc(index_id, index_doc),
+            &index_id,
+            &WriterMessage::index_single_doc(&index_id, index_doc),
         )
         .await;
 
-    Ok(id.to_string())
+    http::success(&PostIndexResponse::new(&doc_id))
 }
 
 #[cfg(test)]
