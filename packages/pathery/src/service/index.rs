@@ -10,7 +10,7 @@ use tantivy::{DocAddress, Document, Score, SnippetGenerator};
 use {serde_json as json, tracing};
 
 use crate::index::IndexLoader;
-use crate::lambda::http::{self, PatheryRequest};
+use crate::lambda::http::{self, HandlerResult, HttpRequest, PatheryRequest};
 use crate::message::{WriterMessage, WriterSender};
 use crate::schema::{SchemaLoader, TantivySchema};
 use crate::util;
@@ -19,13 +19,13 @@ trait IndexResourceRequest {
     fn index_id(&self) -> String;
 }
 
-impl IndexResourceRequest for http::Request {
+impl IndexResourceRequest for HttpRequest {
     fn index_id(&self) -> String {
         self.required_path_param("index_id")
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(Serialize)]
 pub struct PostIndexResponse {
     #[serde(rename = "__id")]
     pub doc_id: String,
@@ -37,8 +37,8 @@ pub struct PostIndexResponse {
 pub async fn post_index(
     writer_client: &dyn WriterSender,
     schema_loader: &dyn SchemaLoader,
-    request: http::Request,
-) -> Result<http::Response<http::Body>, http::Error> {
+    request: HttpRequest,
+) -> HandlerResult {
     let index_id = request.index_id();
 
     let mut payload = match request.payload::<json::Value>() {
@@ -111,10 +111,7 @@ pub struct QueryResponse {
     pub matches: Vec<SearchHit>,
 }
 
-pub async fn query_index(
-    index_loader: &dyn IndexLoader,
-    request: http::Request,
-) -> Result<http::Response<http::Body>, http::Error> {
+pub async fn query_index(index_loader: &dyn IndexLoader, request: HttpRequest) -> HandlerResult {
     let index_id = request.index_id();
 
     let payload = match request.payload::<QueryRequest>() {
@@ -198,6 +195,7 @@ mod tests {
 
     use super::*;
     use crate::index::TantivyIndex;
+    use crate::lambda::http::HandlerResponse;
     use crate::message::{test_writer_sender, TestWriterSender};
     use crate::schema::SchemaProvider;
 
@@ -224,8 +222,8 @@ mod tests {
         (test_writer_sender(), SchemaProvider::from_json(config))
     }
 
-    fn request(index_id: &str, body: json::Value) -> http::Request {
-        let request: http::Request = Request::builder()
+    fn request(index_id: &str, body: json::Value) -> HttpRequest {
+        let request: HttpRequest = Request::builder()
             .header("Content-Type", "application/json")
             .body(json::to_string(&body).expect("should serialize").into())
             .expect("should build request");
@@ -235,7 +233,7 @@ mod tests {
         )
     }
 
-    fn parse_response<V>(response: http::Response<http::Body>) -> (StatusCode, V)
+    fn parse_response<V>(response: HandlerResponse) -> (StatusCode, V)
     where V: for<'de> Deserialize<'de> {
         let code = response.status();
         let body: V = if let Body::Text(x) = response.body() {

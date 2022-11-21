@@ -1,8 +1,10 @@
-pub use lambda_http::{
-    self as http, run, service_fn, Body, Error, IntoResponse, Request, RequestExt, Response,
-};
+use lambda_http::{self as http, Body, RequestExt, Response};
 use serde::{Deserialize, Serialize};
 use serde_json as json;
+
+pub type HttpRequest = http::Request;
+pub type HandlerResponse = http::Response<http::Body>;
+pub type HandlerResult = Result<HandlerResponse, http::Error>;
 
 pub fn err_response(status: u16, message: &str) -> http::Response<http::Body> {
     Response::builder()
