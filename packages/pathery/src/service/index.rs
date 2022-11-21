@@ -125,11 +125,11 @@ pub struct QueryResponse {
 
 pub async fn query_index(
     index_loader: &dyn IndexLoader,
-    event: http::Request,
+    request: http::Request,
 ) -> Result<http::Response<http::Body>, http::Error> {
-    let index_id = event.required_path_param("index_id");
+    let index_id = request.index_id();
 
-    let payload = match event.payload::<QueryRequest>() {
+    let payload = match request.payload::<QueryRequest>() {
         Ok(value) => value,
         Err(err) => return err.into(),
     };
