@@ -656,13 +656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "delete-doc"
-version = "0.1.0"
-dependencies = [
- "pathery",
-]
-
-[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -4,6 +4,7 @@ pub mod lambda;
 pub mod message;
 pub mod schema;
 pub mod service;
+pub mod util;
 
 pub use anyhow;
 pub use chrono;

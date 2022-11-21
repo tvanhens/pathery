@@ -2,14 +2,13 @@ use crate::index::IndexLoader;
 use crate::lambda::http::{self, PatheryRequest};
 use crate::message::{WriterMessage, WriterSender};
 use crate::schema::{SchemaLoader, TantivySchema};
+use crate::util;
 
-use chrono::{DateTime, Utc};
 use json::Map;
 use serde::{self, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::SystemTime;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::Field;
@@ -24,17 +23,6 @@ impl IndexResourceRequest for http::Request {
     fn index_id(&self) -> String {
         self.required_path_param("index_id")
     }
-}
-
-fn generate_id() -> String {
-    let id = uuid::Uuid::new_v4();
-    id.to_string()
-}
-
-fn timestamp() -> String {
-    let now = SystemTime::now();
-    let now: DateTime<Utc> = now.into();
-    now.to_rfc3339()
 }
 
 #[derive(serde::Serialize)]
@@ -69,7 +57,7 @@ pub async fn post_index(
     let doc_id = doc_obj
         .remove("__id")
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(generate_id);
+        .unwrap_or_else(util::generate_id);
 
     let id_field = schema.id_field();
 
@@ -102,7 +90,7 @@ pub async fn post_index(
 
     http::success(&PostIndexResponse {
         doc_id,
-        updated_at: timestamp(),
+        updated_at: util::timestamp(),
     })
 }
 
