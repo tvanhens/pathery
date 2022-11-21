@@ -53,6 +53,7 @@ impl PostIndexResponse {
     }
 }
 
+#[tracing::instrument(skip(writer_client, schema_loader))]
 pub async fn post_index(
     writer_client: &dyn WriterSender,
     schema_loader: &dyn SchemaLoader,
@@ -73,8 +74,7 @@ pub async fn post_index(
     http::success(&PostIndexResponse::new(&doc_id))
 }
 
-#[tracing::instrument(skip(client, schema_loader, raw_doc))]
-pub async fn index_doc(
+async fn index_doc(
     client: &dyn WriterSender,
     schema_loader: &dyn SchemaLoader,
     index_id: &str,
@@ -130,6 +130,11 @@ mod tests {
         schema::SchemaProvider,
         tokio,
     };
+    use ::http::{Request, StatusCode};
+    use aws_lambda_events::query_map::QueryMap;
+    use lambda_http::{Body, RequestExt};
+    use std::collections::HashMap;
+
     fn setup() -> (TestWriterSender, SchemaProvider) {
         let config = json::json!({
             "indexes": [
@@ -153,6 +158,27 @@ mod tests {
         (test_writer_sender(), SchemaProvider::from_json(config))
     }
 
+    fn request(index_id: &str, body: json::Value) -> http::Request {
+        let request: http::Request = Request::builder()
+            .header("Content-Type", "application/json")
+            .body(json::to_string(&body).expect("should serialize").into())
+            .expect("should build request");
+
+        request.with_path_parameters::<QueryMap>(
+            HashMap::from([(String::from("index_id"), String::from(index_id))]).into(),
+        )
+    }
+
+    fn parse_response(response: http::Response<http::Body>) -> (StatusCode, json::Value) {
+        let code = response.status();
+        let body: json::Value = if let Body::Text(x) = response.body() {
+            json::from_str(x).unwrap()
+        } else {
+            panic!("Invalid body")
+        };
+        (code, body)
+    }
+
     // Happy Path
 
     #[tokio::test]
@@ -164,9 +190,13 @@ mod tests {
             "author": "Robert Pirsig"
         });
 
-        let result = index_doc(&client, &loader, "test", &doc).await;
+        let request = request("test", doc);
 
-        result.expect("result should not be an error");
+        let response = post_index(&client, &loader, request).await.unwrap();
+
+        let (code, _body) = parse_response(response);
+
+        assert_eq!(code, 200);
     }
 
     // Error States
@@ -177,9 +207,14 @@ mod tests {
 
         let doc = json::json!([]);
 
-        let result = index_doc(&client, &loader, "test", &doc).await;
+        let request = request("test", doc);
 
-        assert_eq!(result, Err(IndexError::NotJsonObject));
+        let response = post_index(&client, &loader, request).await.unwrap();
+
+        let (code, body) = parse_response(response);
+
+        assert_eq!(code, 400);
+        assert_eq!(body, json::json!({"message": "Expected a JSON object"}));
     }
 
     #[tokio::test]
@@ -188,9 +223,17 @@ mod tests {
 
         let doc = json::json!({"foo": 1});
 
-        let result = index_doc(&client, &loader, "test", &doc).await;
+        let request = request("test", doc);
 
-        assert_eq!(result, Err(IndexError::UnsupportedJsonValue));
+        let response = post_index(&client, &loader, request).await.unwrap();
+
+        let (code, body) = parse_response(response);
+
+        assert_eq!(code, 400);
+        assert_eq!(
+            body,
+            json::json!({"message": "Unsupported JSON value in object"})
+        );
     }
 
     #[tokio::test]
@@ -201,8 +244,14 @@ mod tests {
             "foobar": "baz",
         });
 
-        let result = index_doc(&client, &loader, "test", &doc).await;
+        let request = request("test", doc);
 
-        assert_eq!(result, Err(IndexError::EmptyObject));
+        let response = post_index(&client, &loader, request).await.unwrap();
+
+        let (code, body) = parse_response(response);
+
+        assert_eq!(code, 400);
+        // Empty because the non-existent field does not explicitly trigger a failure - it just doesn't get indexed.
+        assert_eq!(body, json::json!({"message": "Cannot index empty object"}));
     }
 }
