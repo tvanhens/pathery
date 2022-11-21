@@ -1,19 +1,19 @@
+use std::collections::HashMap;
+
+use json::Map;
+use serde::{self, Deserialize, Serialize};
+use serde_json::Value;
+use tantivy::collector::TopDocs;
+use tantivy::query::QueryParser;
+use tantivy::schema::Field;
+use tantivy::{DocAddress, Document, Score, SnippetGenerator};
+use {serde_json as json, tracing};
+
 use crate::index::IndexLoader;
 use crate::lambda::http::{self, PatheryRequest};
 use crate::message::{WriterMessage, WriterSender};
 use crate::schema::{SchemaLoader, TantivySchema};
 use crate::util;
-
-use json::Map;
-use serde::{self, Deserialize, Serialize};
-use serde_json as json;
-use serde_json::Value;
-use std::collections::HashMap;
-use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
-use tantivy::schema::Field;
-use tantivy::{DocAddress, Document, Score, SnippetGenerator};
-use tracing;
 
 trait IndexResourceRequest {
     fn index_id(&self) -> String;
@@ -186,23 +186,21 @@ pub async fn query_index(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
-        index::TantivyIndex,
-        message::{test_writer_sender, TestWriterSender},
-        schema::SchemaProvider,
-        tokio,
-    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
     use ::http::{Request, StatusCode};
     use aws_lambda_events::query_map::QueryMap;
     use lambda_http::{Body, RequestExt};
     use serde::Deserialize;
-    use std::{collections::HashMap, sync::Arc};
-    use tantivy::{
-        doc,
-        schema::{self, Schema},
-        Index,
-    };
+    use tantivy::schema::{self, Schema};
+    use tantivy::{doc, Index};
+
+    use super::*;
+    use crate::index::TantivyIndex;
+    use crate::message::{test_writer_sender, TestWriterSender};
+    use crate::schema::SchemaProvider;
+    use crate::tokio;
 
     fn setup() -> (TestWriterSender, SchemaProvider) {
         let config = json::json!({
@@ -239,9 +237,7 @@ mod tests {
     }
 
     fn parse_response<V>(response: http::Response<http::Body>) -> (StatusCode, V)
-    where
-        V: for<'de> Deserialize<'de>,
-    {
+    where V: for<'de> Deserialize<'de> {
         let code = response.status();
         let body: V = if let Body::Text(x) = response.body() {
             json::from_str(x).unwrap()
@@ -319,7 +315,8 @@ mod tests {
         let (code, body) = parse_response::<json::Value>(response);
 
         assert_eq!(code, 400);
-        // Empty because the non-existent field does not explicitly trigger a failure - it just doesn't get indexed.
+        // Empty because the non-existent field does not explicitly trigger a failure - it just
+        // doesn't get indexed.
         assert_eq!(body, json::json!({"message": "Cannot index empty object"}));
     }
 

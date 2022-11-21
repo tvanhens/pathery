@@ -3,10 +3,8 @@ pub mod sqs;
 
 use std::panic;
 
-pub use lambda_runtime;
-pub use tracing;
-
 pub use lambda_runtime::Error;
+pub use {lambda_runtime, tracing};
 
 pub fn init_tracing() {
     tracing_subscriber::fmt()

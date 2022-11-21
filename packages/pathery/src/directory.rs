@@ -1,8 +1,8 @@
 use std::path::Path;
-use tantivy::{
-    directory::{error::OpenDirectoryError, DirectoryLock, MmapDirectory},
-    Directory,
-};
+
+use tantivy::directory::error::OpenDirectoryError;
+use tantivy::directory::{DirectoryLock, MmapDirectory};
+use tantivy::Directory;
 
 /// Directory that wraps MmapDirectory without using a lockfile.
 ///
@@ -14,9 +14,7 @@ pub struct PatheryDirectory {
 
 impl PatheryDirectory {
     pub fn open<P>(directory_path: P) -> Result<PatheryDirectory, OpenDirectoryError>
-    where
-        P: AsRef<Path>,
-    {
+    where P: AsRef<Path> {
         let inner = MmapDirectory::open(directory_path)?;
         Ok(PatheryDirectory { inner })
     }
