@@ -11,9 +11,10 @@ use {serde_json as json, tracing};
 
 use crate::index::IndexLoader;
 use crate::lambda::http::{self, HandlerResult, HttpRequest, PatheryRequest};
-use crate::message::{WriterMessage, WriterSender};
 use crate::schema::{SchemaLoader, TantivySchema};
 use crate::util;
+use crate::worker::index_writer::client::IndexWriterClient;
+use crate::worker::index_writer::op::IndexWriterOp;
 
 trait IndexResourceRequest {
     fn index_id(&self) -> String;
@@ -35,7 +36,7 @@ pub struct PostIndexResponse {
 // Indexes a document supplied via a JSON object in the body.
 #[tracing::instrument(skip(writer_client, schema_loader))]
 pub async fn post_index(
-    writer_client: &dyn WriterSender,
+    writer_client: &dyn IndexWriterClient,
     schema_loader: &dyn SchemaLoader,
     request: HttpRequest,
 ) -> HandlerResult {
@@ -84,7 +85,7 @@ pub async fn post_index(
     writer_client
         .send_message(
             &index_id,
-            &WriterMessage::index_single_doc(&index_id, index_doc),
+            IndexWriterOp::index_single_doc(&index_id, index_doc),
         )
         .await;
 
@@ -196,10 +197,10 @@ mod tests {
     use super::*;
     use crate::index::TantivyIndex;
     use crate::lambda::http::HandlerResponse;
-    use crate::message::{test_writer_sender, TestWriterSender};
     use crate::schema::SchemaProvider;
+    use crate::worker::index_writer::client::test_index_writer_client;
 
-    fn setup() -> (TestWriterSender, SchemaProvider) {
+    fn setup() -> (impl IndexWriterClient, SchemaProvider) {
         let config = json::json!({
             "indexes": [
                 {
@@ -219,7 +220,10 @@ mod tests {
                 }
             ]
         });
-        (test_writer_sender(), SchemaProvider::from_json(config))
+        (
+            test_index_writer_client(),
+            SchemaProvider::from_json(config),
+        )
     }
 
     fn request(index_id: &str, body: json::Value) -> HttpRequest {
