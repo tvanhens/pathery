@@ -15,7 +15,7 @@ pub async fn delete_doc(client: &dyn IndexWriterClient, request: HttpRequest) ->
     let doc_id = request.required_path_param("doc_id");
 
     client
-        .send_message(&index_id, IndexWriterOp::delete_doc(&index_id, &doc_id))
+        .send_message(IndexWriterOp::delete_doc(&index_id, &doc_id))
         .await;
 
     http::success(&DeleteDocResponse {
