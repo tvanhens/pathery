@@ -2,11 +2,11 @@ use crate::{
     directory::PatheryDirectory,
     schema::{SchemaLoader, SchemaProvider},
 };
-use std::{fs, path::Path, rc::Rc};
+use std::{fs, path::Path, sync::Arc};
 use tantivy::{schema::Field, Index, IndexWriter};
 
-pub trait IndexLoader {
-    fn load_index(&self, index_id: &str) -> Rc<Index>;
+pub trait IndexLoader: Send + Sync {
+    fn load_index(&self, index_id: &str) -> Arc<Index>;
 }
 
 pub struct IndexProvider {
@@ -22,7 +22,7 @@ impl IndexProvider {
 }
 
 impl IndexLoader for IndexProvider {
-    fn load_index(&self, index_id: &str) -> Rc<Index> {
+    fn load_index(&self, index_id: &str) -> Arc<Index> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let index = if let Ok(existing_dir) = PatheryDirectory::open(&directory_path) {
@@ -34,14 +34,14 @@ impl IndexLoader for IndexProvider {
                 .expect("Index should be creatable")
         };
 
-        Rc::new(index)
+        Arc::new(index)
     }
 }
 
 /// Used for testing purposes. Always returns the same Rc wrapped index.
-impl IndexLoader for Rc<Index> {
-    fn load_index(&self, _index_id: &str) -> Rc<Index> {
-        Rc::clone(self)
+impl IndexLoader for Arc<Index> {
+    fn load_index(&self, _index_id: &str) -> Arc<Index> {
+        Arc::clone(self)
     }
 }
 
