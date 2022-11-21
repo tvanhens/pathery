@@ -1,4 +1,4 @@
-use crate::lambda::http::{self, PatheryRequest};
+use crate::lambda::http::{self, HandlerResult, HttpRequest, PatheryRequest};
 use crate::message::{WriterMessage, WriterSender};
 use crate::util;
 
@@ -9,10 +9,7 @@ pub struct DeleteDocResponse {
     pub deleted_at: String,
 }
 
-pub async fn delete_doc(
-    client: &dyn WriterSender,
-    request: http::Request,
-) -> Result<http::Response<http::Body>, http::Error> {
+pub async fn delete_doc(client: &dyn WriterSender, request: HttpRequest) -> HandlerResult {
     let index_id = request.required_path_param("index_id");
     let doc_id = request.required_path_param("doc_id");
 
