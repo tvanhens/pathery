@@ -1,8 +1,8 @@
-use async_trait::async_trait;
-use serde;
-use serde_json as json;
 use std::env;
+
+use async_trait::async_trait;
 use tantivy::Document;
+use {serde, serde_json as json};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub enum WriterMessageDetail {

@@ -1,7 +1,6 @@
 pub use lambda_http::{
     self as http, run, service_fn, Body, Error, IntoResponse, Request, RequestExt, Response,
 };
-
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 
@@ -14,9 +13,7 @@ pub fn err_response(status: u16, message: &str) -> http::Response<http::Body> {
 }
 
 pub fn success<V>(value: &V) -> Result<http::Response<http::Body>, http::Error>
-where
-    V: Serialize,
-{
+where V: Serialize {
     let value = json::to_string(value)?;
     Ok(Response::builder()
         .status(200)
@@ -41,8 +38,7 @@ impl From<PatheryHttpError> for Result<http::Response<http::Body>, http::Error> 
 pub trait PatheryRequest {
     fn required_path_param(&self, name: &str) -> String;
     fn payload<T>(&self) -> Result<T, PatheryHttpError>
-    where
-        T: for<'de> Deserialize<'de>;
+    where T: for<'de> Deserialize<'de>;
 }
 
 impl PatheryRequest for http::Request {
@@ -55,9 +51,7 @@ impl PatheryRequest for http::Request {
     }
 
     fn payload<T>(&self) -> Result<T, PatheryHttpError>
-    where
-        T: for<'de> Deserialize<'de>,
-    {
+    where T: for<'de> Deserialize<'de> {
         let payload = RequestExt::payload::<T>(self);
 
         match payload {

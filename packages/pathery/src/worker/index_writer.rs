@@ -3,11 +3,9 @@ use std::collections::HashMap;
 use serde_json as json;
 use tantivy::{Document, IndexWriter, Term};
 
-use crate::{
-    index::{IndexLoader, TantivyIndex},
-    lambda::{self, sqs},
-    message::{WriterMessage, WriterMessageDetail},
-};
+use crate::index::{IndexLoader, TantivyIndex};
+use crate::lambda::{self, sqs};
+use crate::message::{WriterMessage, WriterMessageDetail};
 
 pub fn delete_doc(writer: &IndexWriter, doc_id: &str) {
     let index = writer.index();

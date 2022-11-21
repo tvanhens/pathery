@@ -1,9 +1,12 @@
-use crate::{
-    directory::PatheryDirectory,
-    schema::{SchemaLoader, SchemaProvider},
-};
-use std::{fs, path::Path, sync::Arc};
-use tantivy::{schema::Field, Index, IndexWriter};
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
+
+use tantivy::schema::Field;
+use tantivy::{Index, IndexWriter};
+
+use crate::directory::PatheryDirectory;
+use crate::schema::{SchemaLoader, SchemaProvider};
 
 pub trait IndexLoader: Send + Sync {
     fn load_index(&self, index_id: &str) -> Arc<Index>;

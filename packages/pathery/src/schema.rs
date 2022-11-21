@@ -1,7 +1,8 @@
+use std::fs;
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
-use std::fs;
 use tantivy::schema::{self, Field, Schema, TextOptions};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -109,8 +110,9 @@ impl SchemaLoader for SchemaProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn parse_test_config() {

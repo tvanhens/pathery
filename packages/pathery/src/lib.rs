@@ -7,10 +7,4 @@ pub mod service;
 pub mod util;
 pub mod worker;
 
-pub use anyhow;
-pub use chrono;
-pub use serde;
-pub use serde_json as json;
-pub use tantivy;
-pub use tokio;
-pub use uuid;
+pub use {anyhow, chrono, serde, serde_json as json, tantivy, tokio, uuid};

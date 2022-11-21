@@ -1,8 +1,6 @@
-use pathery::{
-    index::IndexProvider,
-    lambda::{self, http},
-    service::index::query_index,
-};
+use pathery::index::IndexProvider;
+use pathery::lambda::{self, http};
+use pathery::service::index::query_index;
 
 #[tokio::main]
 async fn main() -> Result<(), http::Error> {
