@@ -1,5 +1,10 @@
-import { Stack, aws_lambda } from "aws-cdk-lib";
-import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
+import { Stack, aws_lambda, CfnOutput } from "aws-cdk-lib";
+import {
+  ApiKey,
+  EndpointType,
+  LambdaIntegration,
+  RestApi,
+} from "aws-cdk-lib/aws-apigateway";
 import {
   GatewayVpcEndpointAwsService,
   SubnetType,
@@ -102,7 +107,28 @@ export class PatheryStack extends Stack {
     deleteDoc.addLayers(configLayer);
     this.indexWriterProducer(deleteDoc);
 
-    const api = new RestApi(this, "PatheryApi");
+    const api = new RestApi(this, "PatheryApi", {
+      restApiName: id,
+      endpointConfiguration: {
+        types: [EndpointType.REGIONAL],
+      },
+      defaultMethodOptions: {
+        apiKeyRequired: true,
+      },
+    });
+
+    const apiKey = new ApiKey(this, "DefaultApiKey", {});
+
+    const plan = api.addUsagePlan("DefaultPlan", {
+      apiStages: [
+        {
+          api,
+          stage: api.deploymentStage,
+        },
+      ],
+    });
+
+    plan.addApiKey(apiKey);
 
     const indexRoute = api.root.addResource("index");
 
@@ -149,6 +175,10 @@ export class PatheryStack extends Stack {
 
     new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,
+    });
+
+    new CfnOutput(this, "ApiKeyOutput", {
+      value: apiKey.keyId,
     });
   }
 
