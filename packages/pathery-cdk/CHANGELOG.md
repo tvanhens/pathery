@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.0.9
+
+### Patch Changes
+
+- 03f647a: Add batch index endpoint
+
 ## 0.0.8
 
 ### Patch Changes
