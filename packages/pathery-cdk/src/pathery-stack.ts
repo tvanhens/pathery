@@ -1,4 +1,4 @@
-import { Stack, aws_lambda, CfnOutput } from "aws-cdk-lib";
+import { Stack, aws_lambda, CfnOutput, Duration } from "aws-cdk-lib";
 import {
   ApiKey,
   EndpointType,
@@ -24,6 +24,25 @@ import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 
 export interface PatheryStackProps {
   config: PatheryConfig;
+
+  /**
+   * IndexWriter configuration overrides.
+   */
+  indexWriter?: {
+    /**
+     * IndexWriter Lambda memorySize.
+     *
+     * @default 2048
+     */
+    memorySize?: number;
+
+    /**
+     * IndexWriter Lambda timeout duration.
+     *
+     * @default Duration.minutes(1)
+     */
+    timeout?: Duration;
+  };
 }
 
 export class PatheryStack extends Stack {
@@ -151,6 +170,8 @@ export class PatheryStack extends Stack {
     documentSingleRoute.addMethod("DELETE", new LambdaIntegration(deleteDoc));
 
     const indexWriterWorker = new RustFunction(this, "index-writer-worker", {
+      memorySize: props.indexWriter?.memorySize ?? 2048,
+      timeout: props.indexWriter?.timeout ?? Duration.minutes(1),
       vpc,
       vpcSubnets: {
         subnets: vpc.isolatedSubnets,
