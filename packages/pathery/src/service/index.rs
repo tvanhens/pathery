@@ -5,7 +5,7 @@ use serde::{self, Deserialize, Serialize};
 use serde_json::Value;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::Field;
+use tantivy::schema::{Field, Schema};
 use tantivy::{DocAddress, Document, Score, SnippetGenerator};
 use {serde_json as json, tracing};
 
@@ -28,24 +28,34 @@ pub struct PostIndexResponse {
     pub updated_at: String,
 }
 
-// Indexes a document supplied via a JSON object in the body.
-#[tracing::instrument(skip(writer_client, schema_loader))]
-pub async fn post_index(
-    writer_client: &IndexWriterClient,
-    schema_loader: &dyn SchemaLoader,
-    request: ServiceRequest<json::Value, PathParams>,
-) -> HandlerResult {
-    let (mut body, path_params) = match request.into_parts() {
-        Ok(parts) => parts,
-        Err(response) => return Ok(response),
-    };
+enum IndexDocError {
+    NotJsonObject,
+    UnsupportedJsonValue,
+    EmptyDoc,
+}
 
-    let schema = schema_loader.load_schema(&path_params.index_id);
+impl From<IndexDocError> for HandlerResult {
+    fn from(err: IndexDocError) -> Self {
+        match err {
+            IndexDocError::UnsupportedJsonValue => {
+                return Ok(http::err_response(400, "Unsupported value in JSON object"))
+            }
+            IndexDocError::EmptyDoc => return Ok(http::err_response(400, "Empty document")),
+            IndexDocError::NotJsonObject => {
+                return Ok(http::err_response(400, "Expected JSON object"))
+            }
+        }
+    }
+}
 
-    let doc_obj = if let Some(obj) = body.as_object_mut() {
+fn index_doc(
+    doc_obj: &mut json::Value,
+    schema: &Schema,
+) -> Result<(String, Document), IndexDocError> {
+    let doc_obj = if let Some(obj) = doc_obj.as_object_mut() {
         obj
     } else {
-        return Ok(http::err_response(400, "Expected a JSON object"));
+        return Err(IndexDocError::NotJsonObject);
     };
 
     let doc_id = doc_obj
@@ -64,16 +74,38 @@ pub async fn post_index(
                     index_doc.add_text(field, v);
                 }
             }
-            _ => return Ok(http::err_response(400, "Unsupported JSON value in object")),
+            _ => return Err(IndexDocError::UnsupportedJsonValue),
         };
     }
 
     if index_doc.is_empty() {
         // There are no fields that match the schema so the doc is empty
-        return Ok(http::err_response(400, "Cannot index empty object"));
+        return Err(IndexDocError::EmptyDoc);
     }
 
     index_doc.add_text(id_field, &doc_id);
+
+    Ok((doc_id, index_doc))
+}
+
+// Indexes a document supplied via a JSON object in the body.
+#[tracing::instrument(skip(writer_client, schema_loader))]
+pub async fn post_index(
+    writer_client: &IndexWriterClient,
+    schema_loader: &dyn SchemaLoader,
+    request: ServiceRequest<json::Value, PathParams>,
+) -> HandlerResult {
+    let (mut body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
+    };
+
+    let schema = schema_loader.load_schema(&path_params.index_id);
+
+    let (doc_id, index_doc) = match index_doc(&mut body, &schema) {
+        Ok(doc) => doc,
+        Err(err) => return err.into(),
+    };
 
     let mut batch = index_writer::batch(&path_params.index_id);
 
@@ -83,6 +115,39 @@ pub async fn post_index(
 
     http::success(&PostIndexResponse {
         doc_id,
+        updated_at: util::timestamp(),
+    })
+}
+
+// Indexes a batch of documents
+#[tracing::instrument(skip(writer_client, schema_loader))]
+pub async fn batch_index(
+    writer_client: &IndexWriterClient,
+    schema_loader: &dyn SchemaLoader,
+    request: ServiceRequest<Vec<json::Value>, PathParams>,
+) -> HandlerResult {
+    let (mut body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
+    };
+
+    let schema = schema_loader.load_schema(&path_params.index_id);
+
+    let mut batch = index_writer::batch(&path_params.index_id);
+
+    for doc_obj in body.iter_mut() {
+        let (_id, document) = match index_doc(doc_obj, &schema) {
+            Ok(doc) => doc,
+            Err(err) => return err.into(),
+        };
+
+        batch.index_doc(document);
+    }
+
+    writer_client.write_batch(batch).await;
+
+    http::success(&PostIndexResponse {
+        doc_id: "".into(),
         updated_at: util::timestamp(),
     })
 }

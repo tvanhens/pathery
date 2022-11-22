@@ -82,6 +82,10 @@ export class PatheryStack extends Stack {
     postIndex.addLayers(configLayer);
     this.indexWriterProducer(postIndex);
 
+    const batchIndex = new RustFunction(this, "batch-index");
+    batchIndex.addLayers(configLayer);
+    this.indexWriterProducer(batchIndex);
+
     const queryIndex = new RustFunction(this, "query-index", {
       vpc,
       vpcSubnets: {
@@ -109,6 +113,10 @@ export class PatheryStack extends Stack {
     const queryActionRoute = indexSingleRoute.addResource("query");
 
     queryActionRoute.addMethod("POST", new LambdaIntegration(queryIndex));
+
+    const batchIndexRoute = indexSingleRoute.addResource("batch");
+
+    batchIndexRoute.addMethod("POST", new LambdaIntegration(batchIndex));
 
     const documentRoute = indexSingleRoute.addResource("doc");
 
