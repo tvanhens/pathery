@@ -1,61 +1,35 @@
 use std::env;
 
-use async_trait::async_trait;
-use serde_json as json;
+use super::op::OpBatch;
+use crate::aws::{s3_bucket_client, sqs_queue_client, S3Bucket, S3Ref, SQSQueue};
+use crate::util;
 
-use super::IndexWriterOp;
-
-#[async_trait]
-pub trait IndexWriterClient: Send + Sync {
-    async fn send_message(&self, message: IndexWriterOp);
+pub struct IndexWriterClient {
+    bucket_client: Box<dyn S3Bucket<OpBatch>>,
+    queue_client: Box<dyn SQSQueue<S3Ref>>,
 }
 
-pub struct AWSIndexWriterClient {
-    queue_url: String,
-    client: aws_sdk_sqs::Client,
-}
+impl IndexWriterClient {
+    pub async fn default() -> IndexWriterClient {
+        let queue_url = env::var("INDEX_WRITER_QUEUE_URL").expect("should be set");
 
-#[async_trait]
-impl IndexWriterClient for AWSIndexWriterClient {
-    async fn send_message(&self, message: IndexWriterOp) {
-        self.client
-            .send_message()
-            .queue_url(&self.queue_url)
-            .message_body(json::to_string(&message).expect("Message should serialize"))
-            .message_group_id(message.index_id)
-            .send()
+        IndexWriterClient {
+            bucket_client: Box::new(s3_bucket_client().await),
+            queue_client: Box::new(sqs_queue_client(&queue_url).await),
+        }
+    }
+
+    pub async fn write_batch(&self, batch: OpBatch) {
+        let key = format!("writer_batches/{}", util::generate_id());
+
+        let s3_ref = self
+            .bucket_client
+            .write_object(&key, &batch)
             .await
-            .expect("send_message should not fail");
-    }
-}
+            .expect("object should write");
 
-pub async fn index_writer_client() -> AWSIndexWriterClient {
-    let queue_url = env::var("QUEUE_URL").expect("QUEUE_URL should be set");
-    let sdk_config = aws_config::load_from_env().await;
-    let client = aws_sdk_sqs::Client::new(&sdk_config);
-    AWSIndexWriterClient { queue_url, client }
-}
-
-#[cfg(test)]
-use std::sync::{Arc, Mutex};
-
-#[cfg(test)]
-struct TestIndexWriterClient {
-    ops: Arc<Mutex<Vec<IndexWriterOp>>>,
-}
-
-#[cfg(test)]
-#[async_trait]
-impl IndexWriterClient for TestIndexWriterClient {
-    async fn send_message(&self, message: IndexWriterOp) {
-        let mut ops = self.ops.lock().unwrap();
-        (*ops).push(message);
-    }
-}
-
-#[cfg(test)]
-pub fn test_index_writer_client() -> impl IndexWriterClient {
-    TestIndexWriterClient {
-        ops: Arc::new(Mutex::new(Vec::new())),
+        self.queue_client
+            .send_message(&batch.index_id, &s3_ref)
+            .await;
     }
 }

@@ -1,26 +1,37 @@
 import { Stack, aws_lambda } from "aws-cdk-lib";
 import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
-import { SubnetType, Vpc } from "aws-cdk-lib/aws-ec2";
+import {
+  GatewayVpcEndpointAwsService,
+  SubnetType,
+  Vpc,
+} from "aws-cdk-lib/aws-ec2";
 import { FileSystem } from "aws-cdk-lib/aws-efs";
-import { LayerVersion } from "aws-cdk-lib/aws-lambda";
+import { Function, LayerVersion } from "aws-cdk-lib/aws-lambda";
 import { Architecture, Code, Runtime } from "aws-cdk-lib/aws-lambda";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
-import { Queue } from "aws-cdk-lib/aws-sqs";
+import { IQueue, Queue } from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { PatheryConfig } from "./config";
 import * as fs from "fs";
 import { RustFunction } from "./rust-function";
 import { PatheryDashboard } from "./pathery-dashboard";
+import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 
 export interface PatheryStackProps {
   config: PatheryConfig;
 }
 
 export class PatheryStack extends Stack {
+  private bucket: IBucket;
+
+  private indexWriterQueue: IQueue;
+
   constructor(scope: Construct, id: string, props: PatheryStackProps) {
     super(scope, id);
 
-    const indexWriterQueue = new Queue(this, "IndexWriterQueue", {
+    this.bucket = new Bucket(this, "DataBucket");
+
+    this.indexWriterQueue = new Queue(this, "IndexWriterQueue", {
       fifo: true,
       contentBasedDeduplication: true,
     });
@@ -33,6 +44,10 @@ export class PatheryStack extends Stack {
           subnetType: SubnetType.PRIVATE_ISOLATED,
         },
       ],
+    });
+
+    vpc.addGatewayEndpoint("S3Endpoint", {
+      service: GatewayVpcEndpointAwsService.S3,
     });
 
     const efs = new FileSystem(this, "Filesystem", {
@@ -65,8 +80,7 @@ export class PatheryStack extends Stack {
 
     const postIndex = new RustFunction(this, "post-index");
     postIndex.addLayers(configLayer);
-    indexWriterQueue.grantSendMessages(postIndex);
-    postIndex.addEnvironment("QUEUE_URL", indexWriterQueue.queueUrl);
+    this.indexWriterProducer(postIndex);
 
     const queryIndex = new RustFunction(this, "query-index", {
       vpc,
@@ -82,25 +96,7 @@ export class PatheryStack extends Stack {
 
     const deleteDoc = new RustFunction(this, "delete-doc");
     deleteDoc.addLayers(configLayer);
-    indexWriterQueue.grantSendMessages(deleteDoc);
-    deleteDoc.addEnvironment("QUEUE_URL", indexWriterQueue.queueUrl);
-
-    const indexWriterWorker = new RustFunction(this, "index-writer-worker", {
-      vpc,
-      vpcSubnets: {
-        subnets: vpc.isolatedSubnets,
-      },
-      filesystem: aws_lambda.FileSystem.fromEfsAccessPoint(
-        accessPoint,
-        "/mnt/pathery-data"
-      ),
-    });
-    indexWriterWorker.addLayers(configLayer);
-    indexWriterWorker.addEventSource(
-      new SqsEventSource(indexWriterQueue, {
-        batchSize: 10,
-      })
-    );
+    this.indexWriterProducer(deleteDoc);
 
     const api = new RestApi(this, "PatheryApi");
 
@@ -120,8 +116,42 @@ export class PatheryStack extends Stack {
 
     documentSingleRoute.addMethod("DELETE", new LambdaIntegration(deleteDoc));
 
+    const indexWriterWorker = new RustFunction(this, "index-writer-worker", {
+      vpc,
+      vpcSubnets: {
+        subnets: vpc.isolatedSubnets,
+      },
+      filesystem: aws_lambda.FileSystem.fromEfsAccessPoint(
+        accessPoint,
+        "/mnt/pathery-data"
+      ),
+    });
+    indexWriterWorker.addLayers(configLayer);
+    indexWriterWorker.addEventSource(
+      new SqsEventSource(this.indexWriterQueue, {
+        batchSize: 10,
+      })
+    );
+    this.bucket.grantRead(indexWriterWorker);
+    this.bucket.grantDelete(indexWriterWorker);
+    indexWriterWorker.addEnvironment(
+      "DATA_BUCKET_NAME",
+      this.bucket.bucketName
+    );
+
     new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,
     });
+  }
+
+  private indexWriterProducer(lambda: Function) {
+    this.bucket.grantWrite(lambda);
+    lambda.addEnvironment("DATA_BUCKET_NAME", this.bucket.bucketName);
+
+    this.indexWriterQueue.grantSendMessages(lambda);
+    lambda.addEnvironment(
+      "INDEX_WRITER_QUEUE_URL",
+      this.indexWriterQueue.queueUrl
+    );
   }
 }
