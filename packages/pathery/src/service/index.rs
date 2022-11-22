@@ -5,7 +5,7 @@ use serde::{self, Deserialize, Serialize};
 use serde_json::Value;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::Field;
+use tantivy::schema::{Field, Schema};
 use tantivy::{DocAddress, Document, Score, SnippetGenerator};
 use {serde_json as json, tracing};
 
@@ -13,8 +13,8 @@ use crate::index::IndexLoader;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::schema::{SchemaLoader, TantivySchema};
 use crate::util;
+use crate::worker::index_writer;
 use crate::worker::index_writer::client::IndexWriterClient;
-use crate::worker::index_writer::op::IndexWriterOp;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PathParams {
@@ -28,24 +28,34 @@ pub struct PostIndexResponse {
     pub updated_at: String,
 }
 
-// Indexes a document supplied via a JSON object in the body.
-#[tracing::instrument(skip(writer_client, schema_loader))]
-pub async fn post_index(
-    writer_client: &dyn IndexWriterClient,
-    schema_loader: &dyn SchemaLoader,
-    request: ServiceRequest<json::Value, PathParams>,
-) -> HandlerResult {
-    let (mut body, path_params) = match request.into_parts() {
-        Ok(parts) => parts,
-        Err(response) => return Ok(response),
-    };
+enum IndexDocError {
+    NotJsonObject,
+    UnsupportedJsonValue,
+    EmptyDoc,
+}
 
-    let schema = schema_loader.load_schema(&path_params.index_id);
+impl From<IndexDocError> for HandlerResult {
+    fn from(err: IndexDocError) -> Self {
+        match err {
+            IndexDocError::UnsupportedJsonValue => {
+                return Ok(http::err_response(400, "Unsupported value in JSON object"))
+            }
+            IndexDocError::EmptyDoc => return Ok(http::err_response(400, "Empty document")),
+            IndexDocError::NotJsonObject => {
+                return Ok(http::err_response(400, "Expected JSON object"))
+            }
+        }
+    }
+}
 
-    let doc_obj = if let Some(obj) = body.as_object_mut() {
+fn index_doc(
+    doc_obj: &mut json::Value,
+    schema: &Schema,
+) -> Result<(String, Document), IndexDocError> {
+    let doc_obj = if let Some(obj) = doc_obj.as_object_mut() {
         obj
     } else {
-        return Ok(http::err_response(400, "Expected a JSON object"));
+        return Err(IndexDocError::NotJsonObject);
     };
 
     let doc_id = doc_obj
@@ -64,26 +74,80 @@ pub async fn post_index(
                     index_doc.add_text(field, v);
                 }
             }
-            _ => return Ok(http::err_response(400, "Unsupported JSON value in object")),
+            _ => return Err(IndexDocError::UnsupportedJsonValue),
         };
     }
 
     if index_doc.is_empty() {
         // There are no fields that match the schema so the doc is empty
-        return Ok(http::err_response(400, "Cannot index empty object"));
+        return Err(IndexDocError::EmptyDoc);
     }
 
     index_doc.add_text(id_field, &doc_id);
 
-    writer_client
-        .send_message(IndexWriterOp::index_single_doc(
-            &path_params.index_id,
-            index_doc,
-        ))
-        .await;
+    Ok((doc_id, index_doc))
+}
+
+// Indexes a document supplied via a JSON object in the body.
+#[tracing::instrument(skip(writer_client, schema_loader))]
+pub async fn post_index(
+    writer_client: &IndexWriterClient,
+    schema_loader: &dyn SchemaLoader,
+    request: ServiceRequest<json::Value, PathParams>,
+) -> HandlerResult {
+    let (mut body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
+    };
+
+    let schema = schema_loader.load_schema(&path_params.index_id);
+
+    let (doc_id, index_doc) = match index_doc(&mut body, &schema) {
+        Ok(doc) => doc,
+        Err(err) => return err.into(),
+    };
+
+    let mut batch = index_writer::batch(&path_params.index_id);
+
+    batch.index_doc(index_doc);
+
+    writer_client.write_batch(batch).await;
 
     http::success(&PostIndexResponse {
         doc_id,
+        updated_at: util::timestamp(),
+    })
+}
+
+// Indexes a batch of documents
+#[tracing::instrument(skip(writer_client, schema_loader))]
+pub async fn batch_index(
+    writer_client: &IndexWriterClient,
+    schema_loader: &dyn SchemaLoader,
+    request: ServiceRequest<Vec<json::Value>, PathParams>,
+) -> HandlerResult {
+    let (mut body, path_params) = match request.into_parts() {
+        Ok(parts) => parts,
+        Err(response) => return Ok(response),
+    };
+
+    let schema = schema_loader.load_schema(&path_params.index_id);
+
+    let mut batch = index_writer::batch(&path_params.index_id);
+
+    for doc_obj in body.iter_mut() {
+        let (_id, document) = match index_doc(doc_obj, &schema) {
+            Ok(doc) => doc,
+            Err(err) => return err.into(),
+        };
+
+        batch.index_doc(document);
+    }
+
+    writer_client.write_batch(batch).await;
+
+    http::success(&PostIndexResponse {
+        doc_id: "".into(),
         updated_at: util::timestamp(),
     })
 }
@@ -179,9 +243,11 @@ pub async fn query_index(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::marker::PhantomData;
     use std::sync::Arc;
 
     use ::http::{Request, StatusCode};
+    use async_trait::async_trait;
     use aws_lambda_events::query_map::QueryMap;
     use lambda_http::{Body, RequestExt};
     use serde::Deserialize;
@@ -189,12 +255,54 @@ mod tests {
     use tantivy::{doc, Index};
 
     use super::*;
+    use crate::aws::{S3Bucket, S3Ref, SQSQueue};
     use crate::index::TantivyIndex;
     use crate::lambda::http::{HandlerResponse, HttpRequest};
     use crate::schema::SchemaProvider;
-    use crate::worker::index_writer::client::test_index_writer_client;
 
-    fn setup() -> (impl IndexWriterClient, SchemaProvider) {
+    fn test_index_writer_client() -> IndexWriterClient {
+        struct TestBucketClient<O> {
+            object_type: PhantomData<O>,
+        }
+
+        #[async_trait]
+        impl<O: Send + Sync> S3Bucket<O> for TestBucketClient<O> {
+            async fn write_object(&self, key: &str, _obj: &O) -> Option<S3Ref> {
+                Some(S3Ref {
+                    bucket: "test".into(),
+                    key: key.into(),
+                })
+            }
+
+            async fn read_object(&self, _s3_ref: &S3Ref) -> Option<O> {
+                todo!()
+            }
+
+            async fn delete_object(&self, _s3_ref: &S3Ref) {
+                todo!()
+            }
+        }
+
+        struct TestQueueClient<O> {
+            object_type: PhantomData<O>,
+        }
+
+        #[async_trait]
+        impl<O: Send + Sync> SQSQueue<O> for TestQueueClient<O> {
+            async fn send_message(&self, _group_id: &str, _message: &O) {}
+        }
+
+        IndexWriterClient {
+            bucket_client: Box::new(TestBucketClient {
+                object_type: PhantomData,
+            }),
+            queue_client: Box::new(TestQueueClient {
+                object_type: PhantomData,
+            }),
+        }
+    }
+
+    fn setup() -> (IndexWriterClient, SchemaProvider) {
         let config = json::json!({
             "indexes": [
                 {
