@@ -1,5 +1,15 @@
 # @pathery/cdk
 
+## 0.1.0
+
+### Minor Changes
+
+- 9ee82b6: Add API key authorization and generate default key.
+
+### Patch Changes
+
+- 83cb85c: Allow IndexWriter config to be specified.
+
 ## 0.0.9
 
 ### Patch Changes
