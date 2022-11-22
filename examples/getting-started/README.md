@@ -105,6 +105,7 @@ If everything worked, you should see an output that looks like the one below:
 
  Outputs:
  arn:aws:cloudformation:us-east-1:117773642559:stack/pathery-dev/f1c49c40-60b3-11ed-b19f-0e7f8a5bfcb7
+ pathery-dev.ApiKeyOutput = <omitted>
  pathery-dev.PatheryApiEndpointB5297505 = https://<omitted>.execute-api.us-east-1.amazonaws.com/prod/
  Stack ARN:
 
@@ -118,14 +119,12 @@ Lets save it to your shell environment for the next step by running:
 export PATHERY_ENDPOINT=<url from PatheryApiEndpoint output above>
 ```
 
-Now we're ready to write a document to the index.
+This endpoint is authenticated using an API key that gets automatically generated.
+Copy the id on the right hand side of the output `<stack-name>.ApiKeyOutput = <omitted>` and paste it into the line below for `<api-key-id>`:
 
-> **🛑 WARNING**
->
-> Pathery is currently in development and as a result, the API endpoint does not currently have authentication.
-> Use at your own risk.
->
-> You can remove the stack when you're done using it by running `npx cdk destroy`.
+```bash
+export PATHERY_KEY="$(aws apigateway get-api-key --include-value --api-key <api-key-id> --query value --output text)"
+```
 
 [index-config]: ../../doc/index-config.md
 
@@ -136,6 +135,7 @@ To index an example document run:
 ```bash
 curl -X POST ${PATHERY_ENDPOINT}index/book-index-v1-test \
      -H 'Content-Type: application/json' \
+     -H "x-api-key: ${PATHERY_KEY}" \
      -d '{"title": "Zen and the Art of Motorcycle Maintenance", "author": "Robert Pirsig"}'
 ```
 
@@ -164,6 +164,7 @@ To query our index we can use a request like the one below:
 ```bash
 curl -X POST ${PATHERY_ENDPOINT}index/book-index-v1-test/query \
      -H 'Content-Type: application/json' \
+     -H "x-api-key: ${PATHERY_KEY}" \
      -d '{"query": "zen art pirsig"}'
 ```
 

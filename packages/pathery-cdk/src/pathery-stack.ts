@@ -1,5 +1,6 @@
 import { Stack, aws_lambda, CfnOutput } from "aws-cdk-lib";
 import {
+  ApiKey,
   EndpointType,
   LambdaIntegration,
   RestApi,
@@ -116,7 +117,9 @@ export class PatheryStack extends Stack {
       },
     });
 
-    api.addUsagePlan("DefaultPlan", {
+    const apiKey = new ApiKey(this, "DefaultApiKey", {});
+
+    const plan = api.addUsagePlan("DefaultPlan", {
       apiStages: [
         {
           api,
@@ -124,6 +127,8 @@ export class PatheryStack extends Stack {
         },
       ],
     });
+
+    plan.addApiKey(apiKey);
 
     const indexRoute = api.root.addResource("index");
 
@@ -170,6 +175,10 @@ export class PatheryStack extends Stack {
 
     new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,
+    });
+
+    new CfnOutput(this, "ApiKeyOutput", {
+      value: apiKey.keyId,
     });
   }
 
