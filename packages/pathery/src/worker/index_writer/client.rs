@@ -5,8 +5,8 @@ use crate::aws::{s3_bucket_client, sqs_queue_client, S3Bucket, S3Ref, SQSQueue};
 use crate::util;
 
 pub struct IndexWriterClient {
-    bucket_client: Box<dyn S3Bucket<OpBatch>>,
-    queue_client: Box<dyn SQSQueue<S3Ref>>,
+    pub(crate) bucket_client: Box<dyn S3Bucket<OpBatch>>,
+    pub(crate) queue_client: Box<dyn SQSQueue<S3Ref>>,
 }
 
 impl IndexWriterClient {

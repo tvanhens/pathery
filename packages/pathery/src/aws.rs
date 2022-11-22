@@ -10,8 +10,8 @@ use crate::json;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct S3Ref {
-    bucket: String,
-    key: String,
+    pub bucket: String,
+    pub key: String,
 }
 
 #[async_trait]

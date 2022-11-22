@@ -175,177 +175,221 @@ pub async fn query_index(
     http::success(&QueryResponse { matches })
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use std::collections::HashMap;
-//     use std::sync::Arc;
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::marker::PhantomData;
+    use std::sync::Arc;
 
-//     use ::http::{Request, StatusCode};
-//     use aws_lambda_events::query_map::QueryMap;
-//     use lambda_http::{Body, RequestExt};
-//     use serde::Deserialize;
-//     use tantivy::schema::{self, Schema};
-//     use tantivy::{doc, Index};
+    use ::http::{Request, StatusCode};
+    use async_trait::async_trait;
+    use aws_lambda_events::query_map::QueryMap;
+    use lambda_http::{Body, RequestExt};
+    use serde::Deserialize;
+    use tantivy::schema::{self, Schema};
+    use tantivy::{doc, Index};
 
-//     use super::*;
-//     use crate::index::TantivyIndex;
-//     use crate::lambda::http::{HandlerResponse, HttpRequest};
-//     use crate::schema::SchemaProvider;
-//     use crate::worker::index_writer::client::test_index_writer_client;
+    use super::*;
+    use crate::aws::{S3Bucket, S3Ref, SQSQueue};
+    use crate::index::TantivyIndex;
+    use crate::lambda::http::{HandlerResponse, HttpRequest};
+    use crate::schema::SchemaProvider;
 
-//     fn setup() -> (impl QueueMessage, SchemaProvider) {
-//         let config = json::json!({
-//             "indexes": [
-//                 {
-//                     "prefix": "test",
-//                     "fields": [
-//                         {
-//                             "name": "title",
-//                             "kind": "text",
-//                             "flags": ["TEXT"]
-//                         },
-//                         {
-//                             "name": "author",
-//                             "kind": "text",
-//                             "flags": ["TEXT"]
-//                         }
-//                     ]
-//                 }
-//             ]
-//         });
-//         (
-//             test_index_writer_client(),
-//             SchemaProvider::from_json(config),
-//         )
-//     }
+    fn test_index_writer_client() -> IndexWriterClient {
+        struct TestBucketClient<O> {
+            object_type: PhantomData<O>,
+        }
 
-//     fn request<B>(index_id: &str, body: B) -> ServiceRequest<B, PathParams>
-//     where B: Serialize {
-//         let request: HttpRequest = Request::builder()
-//             .header("Content-Type", "application/json")
-//             .body(json::to_string(&body).expect("should serialize").into())
-//             .expect("should build request");
+        #[async_trait]
+        impl<O: Send + Sync> S3Bucket<O> for TestBucketClient<O> {
+            async fn write_object(&self, key: &str, _obj: &O) -> Option<S3Ref> {
+                Some(S3Ref {
+                    bucket: "test".into(),
+                    key: key.into(),
+                })
+            }
 
-//         request
-//             .with_path_parameters::<QueryMap>(
-//                 HashMap::from([(String::from("index_id"), String::from(index_id))]).into(),
-//             )
-//             .into()
-//     }
+            async fn read_object(&self, _s3_ref: &S3Ref) -> Option<O> {
+                todo!()
+            }
 
-//     fn parse_response<V>(response: HandlerResponse) -> (StatusCode, V)
-//     where V: for<'de> Deserialize<'de> {
-//         let code = response.status();
-//         let body: V = if let Body::Text(x) = response.body() {
-//             json::from_str(x).unwrap()
-//         } else {
-//             panic!("Invalid body")
-//         };
-//         (code, body)
-//     }
+            async fn delete_object(&self, _s3_ref: &S3Ref) {
+                todo!()
+            }
+        }
 
-//     #[tokio::test]
-//     async fn post_index_doc_with_no_id() {
-//         let (client, loader) = setup();
+        struct TestQueueClient<O> {
+            object_type: PhantomData<O>,
+        }
 
-//         let doc = json::json!({
-//             "title": "Zen and the Art of Motorcycle Maintenance",
-//             "author": "Robert Pirsig"
-//         });
+        #[async_trait]
+        impl<O: Send + Sync> SQSQueue<O> for TestQueueClient<O> {
+            async fn send_message(&self, _group_id: &str, _message: &O) {}
+        }
 
-//         let request = request("test", doc);
+        IndexWriterClient {
+            bucket_client: Box::new(TestBucketClient {
+                object_type: PhantomData,
+            }),
+            queue_client: Box::new(TestQueueClient {
+                object_type: PhantomData,
+            }),
+        }
+    }
 
-//         let response = post_index(&client, &loader, request).await.unwrap();
+    fn setup() -> (IndexWriterClient, SchemaProvider) {
+        let config = json::json!({
+            "indexes": [
+                {
+                    "prefix": "test",
+                    "fields": [
+                        {
+                            "name": "title",
+                            "kind": "text",
+                            "flags": ["TEXT"]
+                        },
+                        {
+                            "name": "author",
+                            "kind": "text",
+                            "flags": ["TEXT"]
+                        }
+                    ]
+                }
+            ]
+        });
+        (
+            test_index_writer_client(),
+            SchemaProvider::from_json(config),
+        )
+    }
 
-//         let (code, _body) = parse_response::<json::Value>(response);
+    fn request<B>(index_id: &str, body: B) -> ServiceRequest<B, PathParams>
+    where B: Serialize {
+        let request: HttpRequest = Request::builder()
+            .header("Content-Type", "application/json")
+            .body(json::to_string(&body).expect("should serialize").into())
+            .expect("should build request");
 
-//         assert_eq!(code, 200);
-//     }
+        request
+            .with_path_parameters::<QueryMap>(
+                HashMap::from([(String::from("index_id"), String::from(index_id))]).into(),
+            )
+            .into()
+    }
 
-//     #[tokio::test]
-//     async fn post_index_non_object() {
-//         let (client, loader) = setup();
+    fn parse_response<V>(response: HandlerResponse) -> (StatusCode, V)
+    where V: for<'de> Deserialize<'de> {
+        let code = response.status();
+        let body: V = if let Body::Text(x) = response.body() {
+            json::from_str(x).unwrap()
+        } else {
+            panic!("Invalid body")
+        };
+        (code, body)
+    }
 
-//         let doc = json::json!([]);
+    #[tokio::test]
+    async fn post_index_doc_with_no_id() {
+        let (client, loader) = setup();
 
-//         let request = request("test", doc);
+        let doc = json::json!({
+            "title": "Zen and the Art of Motorcycle Maintenance",
+            "author": "Robert Pirsig"
+        });
 
-//         let response = post_index(&client, &loader, request).await.unwrap();
+        let request = request("test", doc);
 
-//         let (code, body) = parse_response::<json::Value>(response);
+        let response = post_index(&client, &loader, request).await.unwrap();
 
-//         assert_eq!(code, 400);
-//         assert_eq!(body, json::json!({"message": "Expected a JSON object"}));
-//     }
+        let (code, _body) = parse_response::<json::Value>(response);
 
-//     #[tokio::test]
-//     async fn post_index_unsupported_value() {
-//         let (client, loader) = setup();
+        assert_eq!(code, 200);
+    }
 
-//         let doc = json::json!({"foo": 1});
+    #[tokio::test]
+    async fn post_index_non_object() {
+        let (client, loader) = setup();
 
-//         let request = request("test", doc);
+        let doc = json::json!([]);
 
-//         let response = post_index(&client, &loader, request).await.unwrap();
+        let request = request("test", doc);
 
-//         let (code, body) = parse_response::<json::Value>(response);
+        let response = post_index(&client, &loader, request).await.unwrap();
 
-//         assert_eq!(code, 400);
-//         assert_eq!(
-//             body,
-//             json::json!({"message": "Unsupported JSON value in object"})
-//         );
-//     }
+        let (code, body) = parse_response::<json::Value>(response);
 
-//     #[tokio::test]
-//     async fn post_index_field_that_does_not_exist() {
-//         let (client, loader) = setup();
+        assert_eq!(code, 400);
+        assert_eq!(body, json::json!({"message": "Expected a JSON object"}));
+    }
 
-//         let doc = json::json!({
-//             "foobar": "baz",
-//         });
+    #[tokio::test]
+    async fn post_index_unsupported_value() {
+        let (client, loader) = setup();
 
-//         let request = request("test", doc);
+        let doc = json::json!({"foo": 1});
 
-//         let response = post_index(&client, &loader, request).await.unwrap();
+        let request = request("test", doc);
 
-//         let (code, body) = parse_response::<json::Value>(response);
+        let response = post_index(&client, &loader, request).await.unwrap();
 
-//         assert_eq!(code, 400);
-//         // Empty because the non-existent field does not explicitly trigger a failure - it just
-//         // doesn't get indexed.
-//         assert_eq!(body, json::json!({"message": "Cannot index empty object"}));
-//     }
+        let (code, body) = parse_response::<json::Value>(response);
 
-//     #[tokio::test]
-//     async fn query_document_with_un_indexed_fields() {
-//         let mut schema = Schema::builder();
-//         let title = schema.add_text_field("title", schema::STORED | schema::STRING);
-//         let author = schema.add_text_field("author", schema::STORED);
-//         let index = Index::create_in_ram(schema.build());
-//         let mut writer = index.default_writer();
+        assert_eq!(code, 400);
+        assert_eq!(
+            body,
+            json::json!({"message": "Unsupported JSON value in object"})
+        );
+    }
 
-//         writer
-//             .add_document(doc!(
-//                 title => "hello",
-//                 author => "world",
-//             ))
-//             .unwrap();
+    #[tokio::test]
+    async fn post_index_field_that_does_not_exist() {
+        let (client, loader) = setup();
 
-//         writer.commit().unwrap();
+        let doc = json::json!({
+            "foobar": "baz",
+        });
 
-//         let request = request(
-//             "test",
-//             QueryRequest {
-//                 query: String::from("hello"),
-//             },
-//         );
+        let request = request("test", doc);
 
-//         let response = query_index(&Arc::new(index), request).await.unwrap();
+        let response = post_index(&client, &loader, request).await.unwrap();
 
-//         let (status, body) = parse_response::<QueryResponse>(response);
+        let (code, body) = parse_response::<json::Value>(response);
 
-//         assert_eq!(200, status);
-//         assert_eq!(1, body.matches.len());
-//     }
-// }
+        assert_eq!(code, 400);
+        // Empty because the non-existent field does not explicitly trigger a failure - it just
+        // doesn't get indexed.
+        assert_eq!(body, json::json!({"message": "Cannot index empty object"}));
+    }
+
+    #[tokio::test]
+    async fn query_document_with_un_indexed_fields() {
+        let mut schema = Schema::builder();
+        let title = schema.add_text_field("title", schema::STORED | schema::STRING);
+        let author = schema.add_text_field("author", schema::STORED);
+        let index = Index::create_in_ram(schema.build());
+        let mut writer = index.default_writer();
+
+        writer
+            .add_document(doc!(
+                title => "hello",
+                author => "world",
+            ))
+            .unwrap();
+
+        writer.commit().unwrap();
+
+        let request = request(
+            "test",
+            QueryRequest {
+                query: String::from("hello"),
+            },
+        );
+
+        let response = query_index(&Arc::new(index), request).await.unwrap();
+
+        let (status, body) = parse_response::<QueryResponse>(response);
+
+        assert_eq!(200, status);
+        assert_eq!(1, body.matches.len());
+    }
+}
