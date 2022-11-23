@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::Field;
+use tantivy::schema::{Field, FieldType};
 use tantivy::{DocAddress, Score, SnippetGenerator, TantivyError};
 
 use super::PathParams;
@@ -49,8 +49,15 @@ pub async fn query_index(
         &index,
         schema
             .fields()
-            .filter(|(_, config)| config.is_indexed())
-            .map(|(field, _)| field)
+            .filter_map(|(field, entry)| {
+                if !entry.is_indexed() {
+                    return None;
+                }
+                match entry.field_type() {
+                    FieldType::Str(_) => Some(field),
+                    _ => None,
+                }
+            })
             .collect::<Vec<Field>>(),
     );
 
@@ -98,35 +105,46 @@ pub async fn query_index(
         })
         .collect();
 
-    http::success(&QueryResponse { matches })
+    let query_response = &QueryResponse { matches };
+
+    http::success(query_response)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use tantivy::schema::{self, Schema};
-    use tantivy::Index;
+    use tantivy::IndexWriter;
 
     use super::*;
     use crate::index::TantivyIndex;
+    use crate::schema::SchemaExt;
     use crate::service::index::PathParams;
     use crate::service::test_utils::*;
 
+    trait WriterExt {
+        fn add_json_doc(&self, json_doc: json::Value);
+    }
+
+    impl WriterExt for IndexWriter {
+        fn add_json_doc(&self, json_doc: json::Value) {
+            let schema = self.index().schema();
+
+            let (_id, document) = schema.to_document(json_doc).unwrap();
+
+            self.add_document(document).unwrap();
+        }
+    }
+
     #[tokio::test]
     async fn query_default_response() {
-        let mut schema = Schema::builder();
-        let title = schema.add_text_field("title", schema::STORED | schema::TEXT);
-        let author = schema.add_text_field("author", schema::STORED | schema::TEXT);
-        let index = Index::create_in_ram(schema.build());
+        let (_, _, index) = setup();
+
         let mut writer = index.default_writer();
 
-        writer
-            .add_document(doc!(
-                title => "hello",
-                author => "world",
-            ))
-            .unwrap();
+        writer.add_json_doc(json::json!({
+            "__id": "foobar",
+            "title": "hello",
+            "author": "world"
+        }));
 
         writer.commit().unwrap();
 
@@ -139,7 +157,7 @@ mod tests {
             },
         );
 
-        let response = query_index(&Arc::new(index), request).await.unwrap();
+        let response = query_index(&index, request).await.unwrap();
 
         let (status, body) = parse_response::<QueryResponse>(response);
 
@@ -149,6 +167,7 @@ mod tests {
             QueryResponse {
                 matches: vec![SearchHit {
                     doc: json::json!({
+                        "__id": ["foobar"],
                         "title": ["hello"],
                         "author": ["world"],
                     }),
@@ -163,18 +182,15 @@ mod tests {
 
     #[tokio::test]
     async fn query_document_with_un_indexed_fields() {
-        let mut schema = Schema::builder();
-        let title = schema.add_text_field("title", schema::STORED | schema::STRING);
-        let author = schema.add_text_field("author", schema::STORED);
-        let index = Index::create_in_ram(schema.build());
+        let (_, _, index) = setup();
+
         let mut writer = index.default_writer();
 
-        writer
-            .add_document(doc!(
-                title => "hello",
-                author => "world",
-            ))
-            .unwrap();
+        writer.add_json_doc(json::json!({
+            "__id": "foobar",
+            "title": "hello",
+            "meta": "world"
+        }));
 
         writer.commit().unwrap();
 
@@ -187,7 +203,7 @@ mod tests {
             },
         );
 
-        let response = query_index(&Arc::new(index), request).await.unwrap();
+        let response = query_index(&index, request).await.unwrap();
 
         let (status, body) = parse_response::<QueryResponse>(response);
 

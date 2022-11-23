@@ -52,11 +52,13 @@ mod tests {
 
     #[tokio::test]
     async fn post_index_doc_with_no_id() {
-        let (client, loader) = setup();
+        let (client, loader, _) = setup();
 
         let doc = json::json!({
             "title": "Zen and the Art of Motorcycle Maintenance",
-            "author": "Robert Pirsig"
+            "author": "Robert Pirsig",
+            "date_added": "2022-11-23T18:24:40Z",
+            "isbn": "0060589469"
         });
 
         let request = request(
@@ -75,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn post_index_non_object() {
-        let (client, loader) = setup();
+        let (client, loader, _) = setup();
 
         let doc = json::json!([]);
 
@@ -96,7 +98,7 @@ mod tests {
 
     #[tokio::test]
     async fn post_index_value_that_does_not_match_schema() {
-        let (client, loader) = setup();
+        let (client, loader, _) = setup();
 
         let doc = json::json!({"title": 1});
 
@@ -120,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn post_index_field_that_does_not_exist() {
-        let (client, loader) = setup();
+        let (client, loader, _) = setup();
 
         let doc = json::json!({
             "foobar": "baz",

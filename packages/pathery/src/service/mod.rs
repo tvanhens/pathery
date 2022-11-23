@@ -5,6 +5,7 @@ pub mod index;
 mod test_utils {
     use std::collections::HashMap;
     use std::marker::PhantomData;
+    use std::sync::Arc;
     use std::vec;
 
     use ::http::{Request, StatusCode};
@@ -13,11 +14,12 @@ mod test_utils {
     use lambda_http::{Body, RequestExt};
     use serde::{Deserialize, Serialize};
     pub use tantivy::doc;
+    use tantivy::Index;
 
     use crate::aws::{S3Bucket, S3Ref, SQSQueue};
     pub(crate) use crate::json;
     use crate::lambda::http::{HandlerResponse, HttpRequest, ServiceRequest};
-    use crate::schema::SchemaProvider;
+    use crate::schema::{SchemaLoader, SchemaProvider};
     use crate::worker::index_writer::client::IndexWriterClient;
 
     fn test_index_writer_client() -> IndexWriterClient {
@@ -62,7 +64,7 @@ mod test_utils {
         }
     }
 
-    pub fn setup() -> (IndexWriterClient, SchemaProvider) {
+    pub fn setup() -> (IndexWriterClient, SchemaProvider, Arc<Index>) {
         let config = json::json!({
             "indexes": [
                 {
@@ -71,21 +73,38 @@ mod test_utils {
                         {
                             "name": "title",
                             "kind": "text",
-                            "flags": ["TEXT"]
+                            "flags": ["TEXT", "STORED"]
                         },
                         {
                             "name": "author",
                             "kind": "text",
-                            "flags": ["TEXT"]
+                            "flags": ["TEXT", "STORED"]
+                        },
+                        {
+                            "name": "isbn",
+                            "kind": "text",
+                            "flags": ["STRING"]
+                        },
+                        {
+                            "name": "date_added",
+                            "kind": "date",
+                            "flags": ["INDEXED", "STORED", "FAST"]
+                        },
+                        {
+                            "name": "meta",
+                            "kind": "text",
+                            "flags": ["STORED"]
                         }
                     ]
                 }
             ]
         });
-        (
-            test_index_writer_client(),
-            SchemaProvider::from_json(config),
-        )
+
+        let schema_provider = SchemaProvider::from_json(config);
+
+        let index = Index::create_in_ram(schema_provider.load_schema("test"));
+
+        (test_index_writer_client(), schema_provider, Arc::new(index))
     }
 
     pub fn request<B, P>(body: B, params: P) -> ServiceRequest<B, P>

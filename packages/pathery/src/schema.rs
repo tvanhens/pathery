@@ -2,7 +2,7 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 use serde_json as json;
-use tantivy::schema::{self, DocParsingError, Field, Schema, TextOptions};
+use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
 use tantivy::Document;
 use thiserror::Error;
 
@@ -13,11 +13,14 @@ pub enum TextFieldOption {
     STORED,
     TEXT,
     STRING,
+    FAST,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum FieldKindConfig {
-    Text { options: Vec<TextFieldOption> },
+pub enum NumericFieldOption {
+    STORED,
+    INDEXED,
+    FAST,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -27,6 +30,11 @@ pub enum FieldConfig {
     TextFieldConfig {
         name: String,
         flags: Vec<TextFieldOption>,
+    },
+    #[serde(rename = "date")]
+    DateFieldConfig {
+        name: String,
+        flags: Vec<NumericFieldOption>,
     },
 }
 
@@ -139,8 +147,20 @@ impl SchemaLoader for SchemaProvider {
                                 TextFieldOption::TEXT => acc | schema::TEXT,
                                 TextFieldOption::STORED => acc | schema::STORED,
                                 TextFieldOption::STRING => acc | schema::STRING,
+                                TextFieldOption::FAST => acc | schema::FAST,
                             });
                     schema.add_text_field(name, field_opts);
+                }
+                FieldConfig::DateFieldConfig { name, flags } => {
+                    let field_opts =
+                        flags
+                            .iter()
+                            .fold(NumericOptions::default(), |acc, opt| match opt {
+                                NumericFieldOption::STORED => acc | schema::STORED,
+                                NumericFieldOption::INDEXED => acc | schema::INDEXED,
+                                NumericFieldOption::FAST => acc | schema::FAST,
+                            });
+                    schema.add_date_field(name, field_opts);
                 }
             }
         }
