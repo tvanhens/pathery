@@ -12,6 +12,8 @@ export interface FieldConfig<K, Flags> {
    * Kind descriptions:
    *
    * `text` - Indexes field values as `string`.
+   *
+   * `date` - Indexes field values as ints but serialized as ISO 80601 strings in transit.
    */
   kind: K;
 
@@ -20,11 +22,13 @@ export interface FieldConfig<K, Flags> {
    *
    * Flag descriptions:
    *
-   * `STORED` - Stores the original content for this field, allowing full retrieval and snippet generation.
+   * `STORED`  - Stores the original content for this field, allowing full retrieval and snippet generation.
    *
-   * `TEXT`   - (only for `text`) Marks this field for full-text indexing.
+   * `TEXT`    - (only for `text`) Marks this field for full-text indexing.
    *
-   * `STRING` - (only for `text`) Marks this field for exact-string indexing.
+   * `STRING`  - (only for `text`) Marks this field for exact-string indexing.
+   *
+   * `INDEXED` - (only for `date`) Marks this field for ordered search indexing.
    */
   flags: Flags[];
 }
@@ -32,6 +36,11 @@ export interface FieldConfig<K, Flags> {
 export type TextFieldConfig = FieldConfig<
   "text",
   "STORED" | "STRING" | "TEXT" | "FAST"
+>;
+
+export type DateFieldConfig = FieldConfig<
+  "date",
+  "STORED" | "INDEXED" | "FAST"
 >;
 
 export type IndexFieldConfig = TextFieldConfig;
