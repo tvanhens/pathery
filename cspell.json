@@ -9,8 +9,9 @@
     "Pathery",
     "Pirsig",
     "Runtimes",
-    "upsert"
+    "upsert",
+    "thiserror"
   ],
   "flagWords": [],
-  "ignorePaths": ["node_modules/**", "target/**", "lib/**"]
+  "ignorePaths": ["**/node_modules/**", "target/**", "lib/**"]
 }

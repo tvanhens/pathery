@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.66"
 async-trait = "0.1.58"
 aws-config = "0.51.0"
 aws-sdk-s3 = "0.21.0"
@@ -18,6 +17,7 @@ serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
 tantivy = "0.18.1"
 tantivy-common = "0.3.0"
+thiserror = "1.0.37"
 tokio = { version = "1", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }

@@ -1,20 +1,26 @@
 use std::fs;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
-use tantivy::schema::{self, Field, Schema, TextOptions};
+use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
+use tantivy::Document;
+use thiserror::Error;
+
+use crate::util;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TextFieldOption {
     STORED,
     TEXT,
     STRING,
+    FAST,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum FieldKindConfig {
-    Text { options: Vec<TextFieldOption> },
+pub enum NumericFieldOption {
+    STORED,
+    INDEXED,
+    FAST,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -24,6 +30,11 @@ pub enum FieldConfig {
     TextFieldConfig {
         name: String,
         flags: Vec<TextFieldOption>,
+    },
+    #[serde(rename = "date")]
+    DateFieldConfig {
+        name: String,
+        flags: Vec<NumericFieldOption>,
     },
 }
 
@@ -42,14 +53,57 @@ pub trait SchemaLoader: Send + Sync {
     fn load_schema(&self, index_id: &str) -> Schema;
 }
 
-pub trait TantivySchema {
-    fn id_field(&self) -> Field;
+#[derive(Error, Debug)]
+pub enum IndexDocError {
+    #[error("Expected JSON object")]
+    NotJsonObject,
+    #[error("Request JSON object is empty")]
+    EmptyDoc,
+    #[error("Error parsing JSON object document")]
+    DocParsingError(DocParsingError),
 }
 
-impl TantivySchema for Schema {
+pub trait SchemaExt {
+    fn id_field(&self) -> Field;
+
+    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError>;
+}
+
+impl SchemaExt for Schema {
     fn id_field(&self) -> Field {
         self.get_field("__id")
             .expect("__id field should be present")
+    }
+
+    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError> {
+        let json_doc = if let json::Value::Object(obj) = json_doc {
+            obj
+        } else {
+            return Err(IndexDocError::NotJsonObject);
+        };
+
+        let doc_id = json_doc
+            .get("__id")
+            .and_then(|v| v.as_str())
+            .map(|v| String::from(v));
+
+        let mut document = self
+            .json_object_to_doc(json_doc)
+            .map_err(|err| IndexDocError::DocParsingError(err))?;
+
+        if document.is_empty() {
+            return Err(IndexDocError::EmptyDoc);
+        }
+
+        match doc_id {
+            Some(doc_id) => Ok((doc_id.into(), document)),
+            None => {
+                let id_field = self.id_field();
+                let doc_id = util::generate_id();
+                document.add_text(id_field, &doc_id);
+                Ok((doc_id, document))
+            }
+        }
     }
 }
 
@@ -58,12 +112,12 @@ pub struct SchemaProvider {
 }
 
 impl SchemaProvider {
-    pub fn lambda() -> Result<Self> {
+    pub fn lambda() -> Self {
         let config_path = "/opt/pathery/config.json";
-        let content = fs::read_to_string(config_path)?;
-        let config: PatheryConfig = json::from_str(&content)?;
+        let content = fs::read_to_string(config_path).expect("config should exist");
+        let config: PatheryConfig = json::from_str(&content).expect("config should parse");
 
-        Ok(SchemaProvider { config })
+        SchemaProvider { config }
     }
 
     pub fn from_json(config: json::Value) -> Self {
@@ -93,8 +147,20 @@ impl SchemaLoader for SchemaProvider {
                                 TextFieldOption::TEXT => acc | schema::TEXT,
                                 TextFieldOption::STORED => acc | schema::STORED,
                                 TextFieldOption::STRING => acc | schema::STRING,
+                                TextFieldOption::FAST => acc | schema::FAST,
                             });
                     schema.add_text_field(name, field_opts);
+                }
+                FieldConfig::DateFieldConfig { name, flags } => {
+                    let field_opts =
+                        flags
+                            .iter()
+                            .fold(NumericOptions::default(), |acc, opt| match opt {
+                                NumericFieldOption::STORED => acc | schema::STORED,
+                                NumericFieldOption::INDEXED => acc | schema::INDEXED,
+                                NumericFieldOption::FAST => acc | schema::FAST,
+                            });
+                    schema.add_date_field(name, field_opts);
                 }
             }
         }
@@ -135,5 +201,21 @@ mod tests {
         });
 
         serde_json::from_value::<PatheryConfig>(config).expect("should not throw");
+    }
+
+    #[test]
+    fn serialize_schema() {
+        let mut schema = Schema::builder();
+
+        schema.add_text_field("title", schema::STORED | schema::TEXT);
+        schema.add_text_field("author", schema::STORED | schema::STRING);
+        schema.add_date_field(
+            "created_date",
+            schema::STORED | schema::INDEXED | schema::FAST,
+        );
+
+        let schema = schema.build();
+
+        println!("{}", json::to_string_pretty(&schema).expect("ok"));
     }
 }
