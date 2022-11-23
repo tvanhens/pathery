@@ -1,6 +1,5 @@
 use std::fs;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, Schema, TextOptions};
@@ -105,12 +104,12 @@ pub struct SchemaProvider {
 }
 
 impl SchemaProvider {
-    pub fn lambda() -> Result<Self> {
+    pub fn lambda() -> Self {
         let config_path = "/opt/pathery/config.json";
-        let content = fs::read_to_string(config_path)?;
-        let config: PatheryConfig = json::from_str(&content)?;
+        let content = fs::read_to_string(config_path).expect("config should exist");
+        let config: PatheryConfig = json::from_str(&content).expect("config should parse");
 
-        Ok(SchemaProvider { config })
+        SchemaProvider { config }
     }
 
     pub fn from_json(config: json::Value) -> Self {

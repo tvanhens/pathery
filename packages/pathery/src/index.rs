@@ -19,7 +19,7 @@ pub struct IndexProvider {
 impl IndexProvider {
     pub fn lambda() -> Self {
         Self {
-            schema_loader: SchemaProvider::lambda().expect("SchemaLoader should create"),
+            schema_loader: SchemaProvider::lambda(),
         }
     }
 }
