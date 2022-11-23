@@ -17,16 +17,10 @@ pub struct PathParams {
 
 impl From<IndexDocError> for HandlerResult {
     fn from(err: IndexDocError) -> Self {
-        match err {
-            IndexDocError::EmptyDoc => {
-                return Ok(http::err_response(400, "Request JSON object is empty"))
-            }
-            IndexDocError::NotJsonObject => {
-                return Ok(http::err_response(400, "Expected JSON object"))
-            }
-            IndexDocError::DocParsingError(err) => {
-                return Ok(http::err_response(400, &err.to_string()));
-            }
-        }
+        let message = match err {
+            IndexDocError::DocParsingError(err) => err.to_string(),
+            _ => err.to_string(),
+        };
+        Ok(http::err_response(400, &message))
     }
 }

@@ -18,6 +18,7 @@ serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
 tantivy = "0.18.1"
 tantivy-common = "0.3.0"
+thiserror = "1.0.37"
 tokio = { version = "1", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }

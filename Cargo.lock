@@ -1548,6 +1548,7 @@ dependencies = [
  "serde_json",
  "tantivy",
  "tantivy-common",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",

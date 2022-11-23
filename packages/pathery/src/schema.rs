@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, Schema, TextOptions};
 use tantivy::Document;
+use thiserror::Error;
 
 use crate::util;
 
@@ -45,9 +46,13 @@ pub trait SchemaLoader: Send + Sync {
     fn load_schema(&self, index_id: &str) -> Schema;
 }
 
+#[derive(Error, Debug)]
 pub enum IndexDocError {
+    #[error("Expected JSON object")]
     NotJsonObject,
+    #[error("Request JSON object is empty")]
     EmptyDoc,
+    #[error("Error parsing JSON object document")]
     DocParsingError(DocParsingError),
 }
 
