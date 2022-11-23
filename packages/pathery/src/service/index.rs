@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use json::Map;
 use serde::{self, Deserialize, Serialize};
-use serde_json::Value;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::{Field, Schema};
+use tantivy::schema::{DocParsingError, Field, Schema};
 use tantivy::{DocAddress, Document, Score, SnippetGenerator};
 use {serde_json as json, tracing};
 
@@ -30,62 +29,55 @@ pub struct PostIndexResponse {
 
 enum IndexDocError {
     NotJsonObject,
-    UnsupportedJsonValue,
     EmptyDoc,
+    DocParsingError(DocParsingError),
 }
 
 impl From<IndexDocError> for HandlerResult {
     fn from(err: IndexDocError) -> Self {
         match err {
-            IndexDocError::UnsupportedJsonValue => {
-                return Ok(http::err_response(400, "Unsupported value in JSON object"))
+            IndexDocError::EmptyDoc => {
+                return Ok(http::err_response(400, "Request JSON object is empty"))
             }
-            IndexDocError::EmptyDoc => return Ok(http::err_response(400, "Empty document")),
             IndexDocError::NotJsonObject => {
                 return Ok(http::err_response(400, "Expected JSON object"))
+            }
+            IndexDocError::DocParsingError(err) => {
+                return Ok(http::err_response(400, &err.to_string()));
             }
         }
     }
 }
 
-fn index_doc(
-    doc_obj: &mut json::Value,
-    schema: &Schema,
-) -> Result<(String, Document), IndexDocError> {
-    let doc_obj = if let Some(obj) = doc_obj.as_object_mut() {
+fn index_doc(json_doc: json::Value, schema: &Schema) -> Result<(String, Document), IndexDocError> {
+    let json_doc = if let json::Value::Object(obj) = json_doc {
         obj
     } else {
         return Err(IndexDocError::NotJsonObject);
     };
 
-    let doc_id = doc_obj
-        .remove("__id")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(util::generate_id);
+    let doc_id = json_doc
+        .get("__id")
+        .and_then(|v| v.as_str())
+        .map(|v| String::from(v));
 
-    let id_field = schema.id_field();
+    let mut document = schema
+        .json_object_to_doc(json_doc)
+        .map_err(|err| IndexDocError::DocParsingError(err))?;
 
-    let mut index_doc = Document::new();
-
-    for (key, value) in doc_obj.iter() {
-        match value {
-            Value::String(v) => {
-                if let Some(field) = schema.get_field(key) {
-                    index_doc.add_text(field, v);
-                }
-            }
-            _ => return Err(IndexDocError::UnsupportedJsonValue),
-        };
-    }
-
-    if index_doc.is_empty() {
-        // There are no fields that match the schema so the doc is empty
+    if document.is_empty() {
         return Err(IndexDocError::EmptyDoc);
     }
 
-    index_doc.add_text(id_field, &doc_id);
-
-    Ok((doc_id, index_doc))
+    match doc_id {
+        Some(doc_id) => Ok((doc_id.into(), document)),
+        None => {
+            let id_field = schema.id_field();
+            let doc_id = util::generate_id();
+            document.add_text(id_field, &doc_id);
+            Ok((doc_id, document))
+        }
+    }
 }
 
 // Indexes a document supplied via a JSON object in the body.
@@ -95,14 +87,14 @@ pub async fn post_index(
     schema_loader: &dyn SchemaLoader,
     request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {
-    let (mut body, path_params) = match request.into_parts() {
+    let (body, path_params) = match request.into_parts() {
         Ok(parts) => parts,
         Err(response) => return Ok(response),
     };
 
     let schema = schema_loader.load_schema(&path_params.index_id);
 
-    let (doc_id, index_doc) = match index_doc(&mut body, &schema) {
+    let (doc_id, index_doc) = match index_doc(body, &schema) {
         Ok(doc) => doc,
         Err(err) => return err.into(),
     };
@@ -126,7 +118,7 @@ pub async fn batch_index(
     schema_loader: &dyn SchemaLoader,
     request: ServiceRequest<Vec<json::Value>, PathParams>,
 ) -> HandlerResult {
-    let (mut body, path_params) = match request.into_parts() {
+    let (body, path_params) = match request.into_parts() {
         Ok(parts) => parts,
         Err(response) => return Ok(response),
     };
@@ -135,7 +127,7 @@ pub async fn batch_index(
 
     let mut batch = index_writer::batch(&path_params.index_id);
 
-    for doc_obj in body.iter_mut() {
+    for doc_obj in body.into_iter() {
         let (_id, document) = match index_doc(doc_obj, &schema) {
             Ok(doc) => doc,
             Err(err) => return err.into(),
@@ -384,14 +376,14 @@ mod tests {
         let (code, body) = parse_response::<json::Value>(response);
 
         assert_eq!(code, 400);
-        assert_eq!(body, json::json!({"message": "Expected a JSON object"}));
+        assert_eq!(body, json::json!({"message": "Expected JSON object"}));
     }
 
     #[tokio::test]
-    async fn post_index_unsupported_value() {
+    async fn post_index_value_that_does_not_match_schema() {
         let (client, loader) = setup();
 
-        let doc = json::json!({"foo": 1});
+        let doc = json::json!({"title": 1});
 
         let request = request("test", doc);
 
@@ -402,7 +394,7 @@ mod tests {
         assert_eq!(code, 400);
         assert_eq!(
             body,
-            json::json!({"message": "Unsupported JSON value in object"})
+            json::json!({"message": "The field '\"title\"' could not be parsed: TypeError { expected: \"a string\", json: Number(1) }"})
         );
     }
 
@@ -423,7 +415,10 @@ mod tests {
         assert_eq!(code, 400);
         // Empty because the non-existent field does not explicitly trigger a failure - it just
         // doesn't get indexed.
-        assert_eq!(body, json::json!({"message": "Cannot index empty object"}));
+        assert_eq!(
+            body,
+            json::json!({"message": "Request JSON object is empty"})
+        );
     }
 
     #[tokio::test]

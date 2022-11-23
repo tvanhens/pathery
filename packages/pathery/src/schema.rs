@@ -136,4 +136,20 @@ mod tests {
 
         serde_json::from_value::<PatheryConfig>(config).expect("should not throw");
     }
+
+    #[test]
+    fn serialize_schema() {
+        let mut schema = Schema::builder();
+
+        schema.add_text_field("title", schema::STORED | schema::TEXT);
+        schema.add_text_field("author", schema::STORED | schema::STRING);
+        schema.add_date_field(
+            "created_date",
+            schema::STORED | schema::INDEXED | schema::FAST,
+        );
+
+        let schema = schema.build();
+
+        println!("{}", json::to_string_pretty(&schema).expect("ok"));
+    }
 }
