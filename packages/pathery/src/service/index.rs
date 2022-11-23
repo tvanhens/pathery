@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use json::Map;
 use serde::{self, Deserialize, Serialize};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::{DocParsingError, Field, Schema};
-use tantivy::{DocAddress, Document, Score, SnippetGenerator};
+use tantivy::{DocAddress, Document, Score, SnippetGenerator, TantivyError};
 use {serde_json as json, tracing};
 
 use crate::index::IndexLoader;
@@ -149,14 +148,14 @@ pub struct QueryRequest {
     pub query: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct SearchHit {
     pub doc: json::Value,
-    pub snippets: HashMap<String, String>,
+    pub snippets: json::Value,
     pub score: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct QueryResponse {
     pub matches: Vec<SearchHit>,
 }
@@ -194,37 +193,39 @@ pub async fn query_index(
     let matches: Vec<_> = top_docs
         .into_iter()
         .map(|(score, address)| -> SearchHit {
-            let search_doc = searcher.doc(address).expect("doc should exist");
-            let mut doc_map = Map::new();
-            let mut snippets: HashMap<String, String> = HashMap::new();
+            let document = searcher.doc(address).expect("doc should exist");
 
-            for (field, entry) in index
-                .schema()
-                .fields()
-                .filter(|(_, entry)| entry.is_indexed())
-            {
-                let field_name = entry.name();
-                if let Some(value) = search_doc.get_first(field) {
-                    let value =
-                        json::to_value(value).expect("doc value should be JSON serializable");
-                    doc_map.insert(field_name.to_string(), value);
+            let named_doc = schema.to_named_doc(&document);
 
-                    let mut snippet_gen = SnippetGenerator::create(&searcher, &query, field)
-                        .unwrap_or_else(|_| {
-                            panic!("Unable to create snippet for field: {field_name}")
-                        });
-                    snippet_gen.set_max_num_chars(100);
-                    let snippet_text = snippet_gen.snippet_from_doc(&search_doc).to_html();
-                    if !snippet_text.is_empty() {
-                        snippets.insert(field_name.into(), snippet_text);
+            let snippets: HashMap<String, String> = document
+                .field_values()
+                .iter()
+                .filter_map(|field_value| {
+                    // Only text fields are supported for snippets
+                    let text = field_value.value().as_text()?;
+
+                    let generator =
+                        match SnippetGenerator::create(&searcher, &query, field_value.field()) {
+                            Ok(generator) => Some(generator),
+                            // InvalidArgument is returned when field is not indexed
+                            Err(TantivyError::InvalidArgument(_)) => None,
+                            Err(err) => panic!("{}", err.to_string()),
+                        }?;
+
+                    let snippet = generator.snippet(text).to_html();
+
+                    if snippet.is_empty() {
+                        None
+                    } else {
+                        Some((schema.get_field_name(field_value.field()).into(), snippet))
                     }
-                }
-            }
+                })
+                .collect();
 
             SearchHit {
                 score,
-                doc: doc_map.into(),
-                snippets,
+                doc: json::to_value(named_doc).expect("named doc should serialize"),
+                snippets: json::to_value(snippets).expect("snippets should serialize"),
             }
         })
         .collect();
@@ -237,6 +238,7 @@ mod tests {
     use std::collections::HashMap;
     use std::marker::PhantomData;
     use std::sync::Arc;
+    use std::vec;
 
     use ::http::{Request, StatusCode};
     use async_trait::async_trait;
@@ -418,6 +420,52 @@ mod tests {
         assert_eq!(
             body,
             json::json!({"message": "Request JSON object is empty"})
+        );
+    }
+
+    #[tokio::test]
+    async fn query_default_response() {
+        let mut schema = Schema::builder();
+        let title = schema.add_text_field("title", schema::STORED | schema::TEXT);
+        let author = schema.add_text_field("author", schema::STORED | schema::TEXT);
+        let index = Index::create_in_ram(schema.build());
+        let mut writer = index.default_writer();
+
+        writer
+            .add_document(doc!(
+                title => "hello",
+                author => "world",
+            ))
+            .unwrap();
+
+        writer.commit().unwrap();
+
+        let request = request(
+            "test",
+            QueryRequest {
+                query: String::from("hello"),
+            },
+        );
+
+        let response = query_index(&Arc::new(index), request).await.unwrap();
+
+        let (status, body) = parse_response::<QueryResponse>(response);
+
+        assert_eq!(200, status);
+        assert_eq!(
+            body,
+            QueryResponse {
+                matches: vec![SearchHit {
+                    doc: json::json!({
+                        "title": ["hello"],
+                        "author": ["world"],
+                    }),
+                    score: 0.28768212,
+                    snippets: json::json!({
+                        "title": "<b>hello</b>"
+                    })
+                }]
+            }
         );
     }
 
