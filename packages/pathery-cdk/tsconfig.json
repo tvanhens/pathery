@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "outDir": "lib",
     "declaration": true,
-    "baseUrl": "./src"
+    "baseUrl": "./src",
+    "declarationMap": true
   }
 }

@@ -35,7 +35,7 @@ pub async fn post_index(
 
     let mut batch = index_writer::batch(&path_params.index_id);
 
-    batch.index_doc(index_doc);
+    batch.index_doc(&schema, index_doc);
 
     writer_client.write_batch(batch).await;
 

@@ -58,6 +58,10 @@ export interface PatheryStackProps {
 }
 
 export class PatheryStack extends Stack {
+  readonly apiKey: ApiKey;
+
+  readonly apiGateway: RestApi;
+
   private bucket: IBucket;
 
   private indexWriterQueue: IQueue;
@@ -149,6 +153,8 @@ export class PatheryStack extends Stack {
       },
     });
 
+    this.apiGateway = api;
+
     const apiKey = new ApiKey(this, "DefaultApiKey", {});
 
     const plan = api.addUsagePlan("DefaultPlan", {
@@ -161,6 +167,8 @@ export class PatheryStack extends Stack {
     });
 
     plan.addApiKey(apiKey);
+
+    this.apiKey = apiKey;
 
     const indexRoute = api.root.addResource("index");
 
