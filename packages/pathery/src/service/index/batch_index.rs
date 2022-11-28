@@ -35,7 +35,7 @@ pub async fn batch_index(
             Err(err) => return err.into(),
         };
 
-        batch.index_doc(document);
+        batch.index_doc(&schema, document);
     }
 
     writer_client.write_batch(batch).await;

@@ -6,10 +6,13 @@
   "main": "index.js",
   "scripts": {
     "build": "cdk synth",
-    "deploy": "cdk deploy -O cdk-outputs.json --require-approval never --method direct"
+    "deploy": "cdk deploy --all -O cdk-outputs.json --require-approval never --method direct"
   },
   "dependencies": {
-    "@pathery/cdk": "workspace:*"
+    "@pathery/cdk": "workspace:*",
+    "aws-sdk": "^2.1262.0",
+    "axios": "^1.2.0",
+    "esbuild": "^0.15.16"
   },
   "keywords": [],
   "author": "",

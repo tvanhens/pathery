@@ -36,6 +36,11 @@ pub enum FieldConfig {
         name: String,
         flags: Vec<NumericFieldOption>,
     },
+    #[serde(rename = "i64")]
+    IntegerFieldConfig {
+        name: String,
+        flags: Vec<NumericFieldOption>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -61,6 +66,16 @@ pub enum IndexDocError {
     EmptyDoc,
     #[error("Error parsing JSON object document")]
     DocParsingError(DocParsingError),
+}
+
+fn numeric_field_options(flags: &Vec<NumericFieldOption>) -> NumericOptions {
+    flags
+        .iter()
+        .fold(NumericOptions::default(), |acc, opt| match opt {
+            NumericFieldOption::STORED => acc | schema::STORED,
+            NumericFieldOption::INDEXED => acc | schema::INDEXED,
+            NumericFieldOption::FAST => acc | schema::FAST,
+        })
 }
 
 pub trait SchemaExt {
@@ -152,15 +167,10 @@ impl SchemaLoader for SchemaProvider {
                     schema.add_text_field(name, field_opts);
                 }
                 FieldConfig::DateFieldConfig { name, flags } => {
-                    let field_opts =
-                        flags
-                            .iter()
-                            .fold(NumericOptions::default(), |acc, opt| match opt {
-                                NumericFieldOption::STORED => acc | schema::STORED,
-                                NumericFieldOption::INDEXED => acc | schema::INDEXED,
-                                NumericFieldOption::FAST => acc | schema::FAST,
-                            });
-                    schema.add_date_field(name, field_opts);
+                    schema.add_date_field(name, numeric_field_options(flags));
+                }
+                FieldConfig::IntegerFieldConfig { name, flags } => {
+                    schema.add_i64_field(name, numeric_field_options(flags));
                 }
             }
         }
@@ -187,14 +197,24 @@ mod tests {
                     "prefix": "book-index-v1-",
                     "fields": [
                         {
-                        "name": "title",
-                        "flags": ["STORED", "TEXT"],
-                        "kind": "text",
+                            "name": "title",
+                            "flags": ["STORED", "TEXT"],
+                            "kind": "text",
                         },
                         {
-                        "name": "author",
-                        "flags": ["STORED", "STRING"],
-                        "kind": "text",
+                            "name": "author",
+                            "flags": ["STORED", "STRING"],
+                            "kind": "text",
+                        },
+                        {
+                            "name": "date_added",
+                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "kind": "date",
+                        },
+                        {
+                            "name": "year",
+                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "kind": "i64",
                         },
                     ],
             }]

@@ -64,9 +64,13 @@ pub async fn handle_event(
             .entry(index_id.to_string())
             .or_insert_with(|| index_loader.load_index(&index_id).default_writer());
 
+        let schema = writer.index().schema();
+
         for op in batch.ops {
             match op {
-                IndexWriterOp::IndexDoc { document } => index_doc(writer, document),
+                IndexWriterOp::IndexDoc { document } => {
+                    index_doc(writer, schema.parse_document(&document).unwrap())
+                }
                 IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, &doc_id),
             }
         }
@@ -90,5 +94,98 @@ pub fn batch(index_id: &str) -> OpBatch {
     OpBatch {
         index_id: index_id.into(),
         ops: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use aws_lambda_events::sqs::{self, SqsMessage};
+    use lambda_http::Context;
+    use lambda_runtime::LambdaEvent;
+    use serde_json as json;
+    use tantivy::Index;
+
+    use super::op::OpBatch;
+    use super::{batch, handle_event};
+    use crate::aws::{S3Bucket, S3Ref};
+    use crate::schema::{SchemaExt, SchemaLoader, SchemaProvider};
+
+    pub fn setup() -> Arc<Index> {
+        let config = json::json!({
+            "indexes": [
+                {
+                    "prefix": "test",
+                    "fields": [
+                        {
+                            "name": "year",
+                            "kind": "i64",
+                            "flags": ["INDEXED", "STORED"]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let schema_provider = SchemaProvider::from_json(config);
+
+        let index = Index::create_in_ram(schema_provider.load_schema("test"));
+
+        Arc::new(index)
+    }
+
+    #[async_trait]
+    impl S3Bucket<OpBatch> for OpBatch {
+        async fn read_object(&self, _s3_ref: &S3Ref) -> Option<OpBatch> {
+            let serialized = json::to_string(self).unwrap();
+            Some(json::from_str(&serialized).unwrap())
+        }
+
+        async fn write_object(&self, _key: &str, _object: &OpBatch) -> Option<S3Ref> {
+            todo!()
+        }
+
+        async fn delete_object(&self, _s3_ref: &S3Ref) {}
+    }
+
+    #[tokio::test]
+    async fn test_indexing() {
+        let index_provider = setup();
+        let mut op_batch = batch("test");
+
+        let (_, document) = index_provider
+            .schema()
+            .to_document(json::json!({
+                "year": 1989
+            }))
+            .unwrap();
+
+        op_batch.index_doc(&index_provider.schema(), document);
+
+        let message = SqsMessage {
+            body: Some(
+                json::to_string(&S3Ref {
+                    bucket: String::from(""),
+                    key: String::from(""),
+                })
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+
+        let event = sqs::SqsEvent {
+            records: vec![message],
+        };
+
+        handle_event(
+            &op_batch,
+            &index_provider,
+            LambdaEvent::new(event, Context::default()),
+        )
+        .await
+        .unwrap();
     }
 }

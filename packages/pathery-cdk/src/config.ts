@@ -43,7 +43,15 @@ export type DateFieldConfig = FieldConfig<
   "STORED" | "INDEXED" | "FAST"
 >;
 
-export type IndexFieldConfig = TextFieldConfig;
+export type IntegerFieldConfig = FieldConfig<
+  "i64",
+  "STORED" | "INDEXED" | "FAST"
+>;
+
+export type IndexFieldConfig =
+  | TextFieldConfig
+  | DateFieldConfig
+  | IntegerFieldConfig;
 
 export interface IndexConfig {
   /**
