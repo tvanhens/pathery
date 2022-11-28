@@ -94,7 +94,7 @@ export async function handler(_event: unknown) {
   await http.post(batchUrl, batch, {
     headers: {
       "Content-Type": "application/json",
-      "X-Api-Key": requireVar("API_KEY"),
+      "X-Api-Key": apiKey,
     },
   });
 
