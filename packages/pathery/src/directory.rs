@@ -79,16 +79,12 @@ impl Directory for PatheryDirectory {
                 .and_then(|s| s.as_array())
                 .expect("segments should be set");
 
-            println!("length of segments: {}", segments.len());
-
             let filtered_segments: Vec<_> = segments
                 .iter()
                 .enumerate()
                 .filter(|(idx, _)| (idx + self.partition_n) % self.total_partitions == 0)
                 .map(|(_, v)| v.to_owned())
                 .collect();
-
-            println!("length of filtered segments: {}", filtered_segments.len());
 
             meta.insert(
                 String::from("segments"),
