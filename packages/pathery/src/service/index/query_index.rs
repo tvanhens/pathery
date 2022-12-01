@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tantivy::collector::TopDocs;
@@ -48,18 +47,11 @@ pub async fn query_index(
         Err(response) => return Ok(response),
     };
 
-    let mut index = Arc::try_unwrap(
-        index_loader.load_index(
-            &path_params.index_id,
-            body.with_partition
-                .map(|x| (x.partition_n, x.total_partitions)),
-        ),
-    )
-    .expect("index should only have one reference");
-
-    index
-        .set_default_multithread_executor()
-        .expect("index should be multi-threaded");
+    let index = index_loader.load_index(
+        &path_params.index_id,
+        body.with_partition
+            .map(|x| (x.partition_n, x.total_partitions)),
+    );
 
     let reader = index.reader().expect("Reader should load");
 
