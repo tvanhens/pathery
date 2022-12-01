@@ -100,18 +100,18 @@ impl SchemaExt for Schema {
         let doc_id = json_doc
             .get("__id")
             .and_then(|v| v.as_str())
-            .map(|v| String::from(v));
+            .map(String::from);
 
         let mut document = self
             .json_object_to_doc(json_doc)
-            .map_err(|err| IndexDocError::DocParsingError(err))?;
+            .map_err(IndexDocError::DocParsingError)?;
 
         if document.is_empty() {
             return Err(IndexDocError::EmptyDoc);
         }
 
         match doc_id {
-            Some(doc_id) => Ok((doc_id.into(), document)),
+            Some(doc_id) => Ok((doc_id, document)),
             None => {
                 let id_field = self.id_field();
                 let doc_id = util::generate_id();
