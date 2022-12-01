@@ -5,6 +5,7 @@ use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::{Field, FieldType};
 use tantivy::{DocAddress, Score, SnippetGenerator, TantivyError};
+use tracing::info;
 
 use super::PathParams;
 use crate::index::IndexLoader;
@@ -12,8 +13,17 @@ use crate::json;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct WithPartition {
+    partition_n: usize,
+
+    total_partitions: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct QueryRequest {
     pub query: String,
+
+    pub with_partition: Option<WithPartition>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -37,9 +47,15 @@ pub async fn query_index(
         Err(response) => return Ok(response),
     };
 
-    let index = index_loader.load_index(&path_params.index_id);
+    let index = index_loader.load_index(
+        &path_params.index_id,
+        body.with_partition
+            .map(|x| (x.partition_n, x.total_partitions)),
+    );
 
     let reader = index.reader().expect("Reader should load");
+
+    info!("ReaderLoaded");
 
     let searcher = reader.searcher();
 
@@ -115,7 +131,7 @@ mod tests {
     use tantivy::IndexWriter;
 
     use super::*;
-    use crate::index::TantivyIndex;
+    use crate::index::IndexExt;
     use crate::schema::SchemaExt;
     use crate::service::index::PathParams;
     use crate::service::test_utils::*;
@@ -151,6 +167,7 @@ mod tests {
         let request = request(
             QueryRequest {
                 query: "hello".into(),
+                with_partition: None,
             },
             PathParams {
                 index_id: "test".into(),
@@ -197,6 +214,7 @@ mod tests {
         let request = request(
             QueryRequest {
                 query: "hello".into(),
+                with_partition: None,
             },
             PathParams {
                 index_id: "test".into(),

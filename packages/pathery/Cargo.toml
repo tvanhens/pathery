@@ -15,7 +15,7 @@ lambda_http = { version = "0.7", default-features = false, features = ["apigw_re
 lambda_runtime = "0.7"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
-tantivy = "0.18.1"
+tantivy = { version = "0.18.1" }
 tantivy-common = "0.3.0"
 thiserror = "1.0.37"
 tokio = { version = "1", features = ["full"] }

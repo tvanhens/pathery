@@ -51,7 +51,7 @@ export interface PatheryStackProps {
     /**
      * IndexWriter Lambda memorySize.
      *
-     * @default 1024
+     * @default 3008
      */
     memorySize?: number;
   };
@@ -127,7 +127,8 @@ export class PatheryStack extends Stack {
     this.indexWriterProducer(batchIndex);
 
     const queryIndex = new RustFunction(this, "query-index", {
-      memorySize: props.queryHandler?.memorySize ?? 1024,
+      memorySize: props.queryHandler?.memorySize ?? 3008,
+      timeout: Duration.seconds(5),
       vpc,
       vpcSubnets: {
         subnets: vpc.isolatedSubnets,

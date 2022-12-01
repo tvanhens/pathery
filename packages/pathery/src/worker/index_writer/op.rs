@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 use tantivy::schema::Schema;
 use tantivy::Document;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum IndexWriterOp {
     IndexDoc { document: String },
     DeleteDoc { doc_id: String },
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct OpBatch {
     pub index_id: String,
     pub ops: Vec<IndexWriterOp>,

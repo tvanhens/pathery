@@ -104,7 +104,7 @@ pub async fn s3_bucket_client<O>() -> S3BucketClient<O> {
     let sdk_config = aws_config::load_from_env().await;
 
     S3BucketClient {
-        bucket: bucket_name.into(),
+        bucket: bucket_name,
         client: aws_sdk_s3::Client::new(&sdk_config),
         object_type: PhantomData,
     }

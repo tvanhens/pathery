@@ -8,7 +8,7 @@ use tantivy::{Document, IndexWriter, Term};
 
 use self::op::{IndexWriterOp, OpBatch};
 use crate::aws::{S3Bucket, S3Ref};
-use crate::index::{IndexLoader, TantivyIndex};
+use crate::index::{IndexExt, IndexLoader};
 use crate::lambda::{self, sqs};
 
 fn delete_doc(writer: &IndexWriter, doc_id: &str) {
@@ -62,7 +62,7 @@ pub async fn handle_event(
         let index_id = batch.index_id;
         let writer = writers
             .entry(index_id.to_string())
-            .or_insert_with(|| index_loader.load_index(&index_id).default_writer());
+            .or_insert_with(|| index_loader.load_index(&index_id, None).default_writer());
 
         let schema = writer.index().schema();
 
