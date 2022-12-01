@@ -30,7 +30,7 @@ impl PatheryDirectory {
         let inner = MmapDirectory::open(directory_path)?;
         Ok(PatheryDirectory {
             partition_n: with_partition.map(|x| x.0).unwrap_or(0),
-            total_partitions: with_partition.map(|x| x.1).unwrap_or(0),
+            total_partitions: with_partition.map(|x| x.1).unwrap_or(1),
             inner,
         })
     }

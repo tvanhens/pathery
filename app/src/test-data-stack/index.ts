@@ -27,7 +27,7 @@ export class TestDataStack extends Stack {
     reIndexer.addEnvironment("DATA_BUCKET", dataBucket.bucketName);
     reIndexer.addEnvironment("INDEX_NAME", "libgen-index-v1");
     reIndexer.addEnvironment("PATHERY_BASE_URL", props.patheryApi.url);
-    reIndexer.addEnvironment("BATCH_SIZE", "500");
+    reIndexer.addEnvironment("BATCH_SIZE", "1000");
     reIndexer.addEnvironment("API_KEY_ID", props.apiKey.keyId);
   }
 }

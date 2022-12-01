@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use tantivy::merge_policy::NoMergePolicy;
 use tantivy::schema::Field;
 use tantivy::{Index, IndexWriter};
 
@@ -57,8 +58,14 @@ pub trait IndexExt {
 
 impl IndexExt for Index {
     fn default_writer(&self) -> IndexWriter {
-        self.writer(100_000_000)
-            .expect("Writer should be available")
+        let writer = self
+            .writer(100_000_000)
+            .expect("Writer should be available");
+
+        let merge_policy = NoMergePolicy;
+        writer.set_merge_policy(Box::new(merge_policy));
+
+        writer
     }
 
     fn id_field(&self) -> Field {
