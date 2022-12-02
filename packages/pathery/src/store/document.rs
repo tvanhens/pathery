@@ -7,6 +7,7 @@ use ddb::error::{BatchGetItemError, BatchWriteItemError};
 use ddb::model::{KeysAndAttributes, PutRequest, WriteRequest};
 use ddb::types::SdkError;
 use serde::{Deserialize, Serialize};
+use tantivy::schema::NamedFieldDocument;
 use thiserror::Error;
 
 use crate::search_doc::{DDBKey, SearchDoc, SearchDocId};
@@ -76,15 +77,30 @@ impl From<serde_dynamo::Error> for DocumentStoreError {
 
 type Result<T> = StdResult<T, DocumentStoreError>;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct SearchDocRef(SearchDocId);
+
+impl From<NamedFieldDocument> for SearchDocRef {
+    fn from(doc: NamedFieldDocument) -> Self {
+        let id = doc
+            .0
+            .get("__id")
+            .expect("__id should be set")
+            .first()
+            .expect("__id should exist")
+            .as_text()
+            .expect("__id should be string");
+
+        SearchDocRef(SearchDocId::parse(id))
+    }
+}
 
 #[async_trait]
 pub trait DocumentStore: Send + Sync {
-    /// Get a document by id.
+    /// Get documents by reference.
     async fn get_documents(&self, refs: Vec<SearchDocRef>) -> Result<Vec<SearchDoc>>;
 
-    /// Save a document such that it can be retrieved with get_id.
+    /// Save a document such that it can be retrieved with get_documents.
     async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>>;
 }
 

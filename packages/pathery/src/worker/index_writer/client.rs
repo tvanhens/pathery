@@ -28,21 +28,38 @@ impl LambdaIndexWriterClient {
 
 #[cfg(test)]
 pub mod test_utils {
-    use super::*;
-    use crate::util;
+    use std::sync::Arc;
 
-    pub struct TestIndexWriterClient {}
+    use tantivy::Index;
+
+    use super::*;
+    use crate::index::IndexExt;
+    use crate::store::document::test_util::TestDocumentStore;
+    use crate::util;
+    use crate::worker::index_writer::handle_job;
+
+    pub struct TestIndexWriterClient {
+        index: Arc<Index>,
+        document_store: Arc<TestDocumentStore>,
+    }
 
     #[async_trait]
     impl IndexWriterClient for TestIndexWriterClient {
-        async fn submit_job(&self, _job: Job) -> Result<String, IndexWriterClientError> {
+        async fn submit_job(&self, job: Job) -> Result<String, IndexWriterClientError> {
+            let mut writer = self.index.default_writer();
+
+            handle_job(&mut writer, self.document_store.as_ref(), job).await;
+
             Ok(util::generate_id())
         }
     }
 
     impl TestIndexWriterClient {
-        pub fn create() -> Self {
-            TestIndexWriterClient {}
+        pub fn create(index: &Arc<Index>, document_store: &Arc<TestDocumentStore>) -> Self {
+            TestIndexWriterClient {
+                index: Arc::clone(index),
+                document_store: Arc::clone(document_store),
+            }
         }
     }
 }

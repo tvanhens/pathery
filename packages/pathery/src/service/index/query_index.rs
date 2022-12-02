@@ -11,6 +11,7 @@ use super::PathParams;
 use crate::index::IndexLoader;
 use crate::json;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
+use crate::store::document::{DocumentStore, SearchDocRef};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WithPartition {
@@ -39,6 +40,7 @@ pub struct QueryResponse {
 }
 
 pub async fn query_index(
+    document_store: &dyn DocumentStore,
     index_loader: &dyn IndexLoader,
     request: ServiceRequest<QueryRequest, PathParams>,
 ) -> HandlerResult {
@@ -83,8 +85,35 @@ pub async fn query_index(
 
     let matches: Vec<_> = top_docs
         .into_iter()
-        .map(|(score, address)| -> SearchHit {
+        .map(|(score, address)| {
             let document = searcher.doc(address).expect("doc should exist");
+
+            let named_doc = schema.to_named_doc(&document);
+
+            let stored_ref = SearchDocRef::from(named_doc);
+
+            (score, stored_ref)
+        })
+        .collect();
+
+    let retrieved_matches = match document_store
+        .get_documents(
+            matches
+                .iter()
+                .map(|(_score, doc_ref)| doc_ref.clone())
+                .collect(),
+        )
+        .await
+    {
+        Ok(docs) => docs,
+        Err(_) => todo!(),
+    };
+
+    let matches = retrieved_matches
+        .iter()
+        .zip(matches)
+        .map(|(search_doc, (score, _))| {
+            let document = search_doc.document(&schema);
 
             let named_doc = schema.to_named_doc(&document);
 
@@ -128,43 +157,23 @@ pub async fn query_index(
 
 #[cfg(test)]
 mod tests {
-    use tantivy::IndexWriter;
-
     use super::*;
-    use crate::index::IndexExt;
-    use crate::schema::SchemaExt;
     use crate::service::index::PathParams;
     use crate::service::test_utils::*;
 
-    trait WriterExt {
-        fn add_json_doc(&self, json_doc: json::Value);
-    }
-
-    impl WriterExt for IndexWriter {
-        fn add_json_doc(&self, json_doc: json::Value) {
-            let schema = self.index().schema();
-
-            let (_id, document) = schema.to_document(json_doc).unwrap();
-
-            self.add_document(document).unwrap();
-        }
-    }
-
     #[tokio::test]
     async fn query_default_response() {
-        let TestContext { index_loader, .. } = setup();
-
-        let index = index_loader.load_index("test", None);
-
-        let mut writer = index.default_writer();
-
-        writer.add_json_doc(json::json!({
-            "__id": "foobar",
-            "title": "hello",
-            "author": "world"
-        }));
-
-        writer.commit().unwrap();
+        let TestContext {
+            document_store,
+            index_loader,
+            ..
+        } = setup()
+            .with_documents(vec![json!({
+                "__id": "foobar",
+                "title": "hello",
+                "author": "world"
+            })])
+            .await;
 
         let request = request(
             QueryRequest {
@@ -176,7 +185,9 @@ mod tests {
             },
         );
 
-        let response = query_index(&index, request).await.unwrap();
+        let response = query_index(document_store.as_ref(), &index_loader, request)
+            .await
+            .unwrap();
 
         let (status, body) = parse_response::<QueryResponse>(response);
 
@@ -201,19 +212,17 @@ mod tests {
 
     #[tokio::test]
     async fn query_document_with_un_indexed_fields() {
-        let TestContext { index_loader, .. } = setup();
-
-        let index = index_loader.load_index("test", None);
-
-        let mut writer = index.default_writer();
-
-        writer.add_json_doc(json::json!({
-            "__id": "foobar",
-            "title": "hello",
-            "meta": "world"
-        }));
-
-        writer.commit().unwrap();
+        let TestContext {
+            document_store,
+            index_loader,
+            ..
+        } = setup()
+            .with_documents(vec![json!({
+                "__id": "foobar",
+                "title": "hello",
+                "meta": "world"
+            })])
+            .await;
 
         let request = request(
             QueryRequest {
@@ -225,7 +234,9 @@ mod tests {
             },
         );
 
-        let response = query_index(&index, request).await.unwrap();
+        let response = query_index(document_store.as_ref(), &index_loader, request)
+            .await
+            .unwrap();
 
         let (status, body) = parse_response::<QueryResponse>(response);
 

@@ -107,9 +107,9 @@ impl SearchDoc {
         &self.id
     }
 
-    pub fn document(self, schema: &Schema) -> Document {
+    pub fn document(&self, schema: &Schema) -> Document {
         schema
-            .json_object_to_doc(self.content)
+            .json_object_to_doc(self.content.clone())
             .expect("should succeed since from_json validates")
     }
 }

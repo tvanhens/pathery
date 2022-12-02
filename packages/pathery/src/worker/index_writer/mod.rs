@@ -35,6 +35,35 @@ fn index_doc(writer: &IndexWriter, doc: Document) {
     tracing::info!(message = "doc_indexed", doc_id);
 }
 
+pub async fn handle_job(writer: &mut IndexWriter, document_store: &dyn DocumentStore, job: Job) {
+    let index_id = job.index_id;
+
+    let schema = writer.index().schema();
+
+    let mut doc_refs: Vec<SearchDocRef> = vec![];
+
+    for op in job.ops {
+        match op {
+            IndexWriterOp::IndexDoc { doc_ref } => doc_refs.push(doc_ref),
+
+            IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, doc_id.id()),
+        }
+    }
+
+    let docs = match document_store.get_documents(doc_refs).await {
+        Ok(docs) => docs,
+        Err(_) => todo!(),
+    };
+
+    for doc in docs {
+        let document = doc.document(&schema);
+        index_doc(writer, document);
+    }
+
+    writer.commit().expect("commit should succeed");
+    tracing::info!(message = "index_committed", index_id);
+}
+
 pub async fn handle_event(
     document_store: &dyn DocumentStore,
     index_loader: &dyn IndexLoader,
@@ -55,38 +84,15 @@ pub async fn handle_event(
     let mut writers: HashMap<String, IndexWriter> = HashMap::new();
 
     for job in jobs {
-        let index_id = job.index_id;
-        let writer = writers
+        let index_id = &job.index_id;
+        let mut writer = writers
             .entry(index_id.to_string())
             .or_insert_with(|| index_loader.load_index(&index_id, None).default_writer());
 
-        let schema = writer.index().schema();
-
-        let mut doc_refs: Vec<SearchDocRef> = vec![];
-
-        for op in job.ops {
-            match op {
-                IndexWriterOp::IndexDoc { doc_ref } => doc_refs.push(doc_ref),
-
-                IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, doc_id.id()),
-            }
-        }
-
-        let docs = match document_store.get_documents(doc_refs).await {
-            Ok(docs) => docs,
-            Err(_) => todo!(),
-        };
-
-        for doc in docs {
-            let document = doc.document(&schema);
-            index_doc(writer, document);
-        }
-
-        writer.commit().expect("commit should succeed");
-        tracing::info!(message = "index_committed", index_id);
+        handle_job(&mut writer, document_store, job).await;
     }
 
-    for (_index_id, writer) in writers.into_iter() {
+    for writer in writers.into_values() {
         writer
             .wait_merging_threads()
             .expect("merge should finish without error");
@@ -102,8 +108,8 @@ mod tests {
     use lambda_http::Context;
     use lambda_runtime::LambdaEvent;
 
-    use super::handle_event;
     use super::job::Job;
+    use super::{handle_event, *};
     use crate::search_doc::SearchDoc;
     use crate::test_utils::*;
 
@@ -145,14 +151,12 @@ mod tests {
 
         handle_event(
             document_store.as_ref(),
-            index_loader.as_ref(),
+            &index_loader,
             LambdaEvent::new(event, Context::default()),
         )
         .await
         .unwrap();
 
-        let index = index_loader.load_index("test", None);
-
-        assert_eq!(1, index.reader().unwrap().searcher().num_docs());
+        assert_eq!(1, index_loader.reader().unwrap().searcher().num_docs());
     }
 }

@@ -3,10 +3,7 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
-use tantivy::Document;
 use thiserror::Error;
-
-use crate::util;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TextFieldOption {
@@ -80,45 +77,12 @@ fn numeric_field_options(flags: &Vec<NumericFieldOption>) -> NumericOptions {
 
 pub trait SchemaExt {
     fn id_field(&self) -> Field;
-
-    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError>;
 }
 
 impl SchemaExt for Schema {
     fn id_field(&self) -> Field {
         self.get_field("__id")
             .expect("__id field should be present")
-    }
-
-    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError> {
-        let json_doc = if let json::Value::Object(obj) = json_doc {
-            obj
-        } else {
-            return Err(IndexDocError::NotJsonObject);
-        };
-
-        let doc_id = json_doc
-            .get("__id")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        let mut document = self
-            .json_object_to_doc(json_doc)
-            .map_err(IndexDocError::DocParsingError)?;
-
-        if document.is_empty() {
-            return Err(IndexDocError::EmptyDoc);
-        }
-
-        match doc_id {
-            Some(doc_id) => Ok((doc_id, document)),
-            None => {
-                let id_field = self.id_field();
-                let doc_id = util::generate_id();
-                document.add_text(id_field, &doc_id);
-                Ok((doc_id, document))
-            }
-        }
     }
 }
 
