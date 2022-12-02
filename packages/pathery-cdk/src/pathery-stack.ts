@@ -111,6 +111,10 @@ export class PatheryStack extends Stack {
       service: GatewayVpcEndpointAwsService.S3,
     });
 
+    vpc.addGatewayEndpoint("DynamoEndpoint", {
+      service: GatewayVpcEndpointAwsService.DYNAMODB,
+    });
+
     const efs = new FileSystem(this, "Filesystem", {
       vpc,
     });
@@ -160,6 +164,8 @@ export class PatheryStack extends Stack {
       ),
     });
     queryIndex.addLayers(configLayer);
+    this.table.grantReadData(queryIndex);
+    queryIndex.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
 
     const deleteDoc = new RustFunction(this, "delete-doc");
     deleteDoc.addLayers(configLayer);

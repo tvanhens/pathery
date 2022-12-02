@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::result::Result as StdResult;
 
 use async_trait::async_trait;
 use aws_sdk_dynamodb as ddb;
 use ddb::error::{BatchGetItemError, BatchWriteItemError};
-use ddb::model::{KeysAndAttributes, PutRequest, WriteRequest};
+use ddb::model::{AttributeValue, KeysAndAttributes, PutRequest, WriteRequest};
 use ddb::types::SdkError;
 use serde::{Deserialize, Serialize};
 use tantivy::schema::NamedFieldDocument;
@@ -152,7 +153,12 @@ impl DocumentStore for DDBDocumentStore {
         let mut writes = vec![];
 
         for document in &documents {
-            let item = serde_dynamo::to_item(document)?;
+            let mut item: HashMap<String, AttributeValue> = serde_dynamo::to_item(document)?;
+
+            let key: HashMap<String, AttributeValue> =
+                serde_dynamo::to_item(DDBKey::from(document.id().clone()))?;
+
+            item.extend(key);
 
             let put_request = PutRequest::builder().set_item(Some(item)).build();
 

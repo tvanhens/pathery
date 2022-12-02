@@ -96,7 +96,11 @@ pub async fn query_index(
         })
         .collect();
 
-    let retrieved_matches = match document_store
+    if matches.len() == 0 {
+        return http::success(&QueryResponse { matches: vec![] });
+    }
+
+    let retrieved_matches = document_store
         .get_documents(
             matches
                 .iter()
@@ -104,10 +108,7 @@ pub async fn query_index(
                 .collect(),
         )
         .await
-    {
-        Ok(docs) => docs,
-        Err(_) => todo!(),
-    };
+        .unwrap();
 
     let matches = retrieved_matches
         .iter()
@@ -150,9 +151,7 @@ pub async fn query_index(
         })
         .collect();
 
-    let query_response = &QueryResponse { matches };
-
-    http::success(query_response)
+    http::success(&QueryResponse { matches })
 }
 
 #[cfg(test)]

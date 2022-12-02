@@ -10,7 +10,7 @@ async fn main() -> Result<(), lambda_http::Error> {
     lambda::init_tracing();
 
     let document_store = DDBDocumentStore::create(None).await;
-    let writer_client = LambdaIndexWriterClient::create();
+    let writer_client = LambdaIndexWriterClient::create(None).await;
     let schema_loader = SchemaProvider::lambda();
 
     lambda_http::run(lambda_http::service_fn(|event: HttpRequest| {

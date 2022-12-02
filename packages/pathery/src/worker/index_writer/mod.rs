@@ -50,10 +50,7 @@ pub async fn handle_job(writer: &mut IndexWriter, document_store: &dyn DocumentS
         }
     }
 
-    let docs = match document_store.get_documents(doc_refs).await {
-        Ok(docs) => docs,
-        Err(_) => todo!(),
-    };
+    let docs = document_store.get_documents(doc_refs).await.unwrap();
 
     for doc in docs {
         let document = doc.document(&schema);
