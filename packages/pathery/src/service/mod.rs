@@ -4,67 +4,26 @@ pub mod index;
 #[cfg(test)]
 mod test_utils {
     use std::collections::HashMap;
-    use std::marker::PhantomData;
     use std::sync::Arc;
     use std::vec;
 
     use ::http::{Request, StatusCode};
-    use async_trait::async_trait;
     use aws_lambda_events::query_map::QueryMap;
     use lambda_http::{Body, RequestExt};
     use serde::{Deserialize, Serialize};
     pub use tantivy::doc;
     use tantivy::Index;
 
-    use crate::aws::{S3Bucket, S3Ref, SQSQueue};
     pub(crate) use crate::json;
     use crate::lambda::http::{HandlerResponse, HttpRequest, ServiceRequest};
     use crate::schema::{SchemaLoader, SchemaProvider};
-    use crate::worker::index_writer::client::DefaultClient;
+    use crate::worker::index_writer::client::IndexWriterClient;
 
-    fn test_index_writer_client() -> DefaultClient {
-        struct TestBucketClient<O> {
-            object_type: PhantomData<O>,
-        }
-
-        #[async_trait]
-        impl<O: Send + Sync> S3Bucket<O> for TestBucketClient<O> {
-            async fn write_object(&self, key: &str, _obj: &O) -> Option<S3Ref> {
-                Some(S3Ref {
-                    bucket: "test".into(),
-                    key: key.into(),
-                })
-            }
-
-            async fn read_object(&self, _s3_ref: &S3Ref) -> Option<O> {
-                todo!()
-            }
-
-            async fn delete_object(&self, _s3_ref: &S3Ref) {
-                todo!()
-            }
-        }
-
-        struct TestQueueClient<O> {
-            object_type: PhantomData<O>,
-        }
-
-        #[async_trait]
-        impl<O: Send + Sync> SQSQueue<O> for TestQueueClient<O> {
-            async fn send_message(&self, _group_id: &str, _message: &O) {}
-        }
-
-        DefaultClient {
-            bucket_client: Box::new(TestBucketClient {
-                object_type: PhantomData,
-            }),
-            queue_client: Box::new(TestQueueClient {
-                object_type: PhantomData,
-            }),
-        }
+    fn test_index_writer_client() -> Box<dyn IndexWriterClient> {
+        todo!()
     }
 
-    pub fn setup() -> (DefaultClient, SchemaProvider, Arc<Index>) {
+    pub fn setup() -> (Box<dyn IndexWriterClient>, SchemaProvider, Arc<Index>) {
         let config = json::json!({
             "indexes": [
                 {

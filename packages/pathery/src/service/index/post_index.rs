@@ -3,8 +3,8 @@ use serde::Serialize;
 use super::PathParams;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::schema::{SchemaExt, SchemaLoader};
-use crate::worker::index_writer;
-use crate::worker::index_writer::client::DefaultClient;
+use crate::worker::index_writer::client::IndexWriterClient;
+use crate::worker::index_writer::job::Job;
 use crate::{json, util};
 
 #[derive(Serialize)]
@@ -17,7 +17,7 @@ pub struct PostIndexResponse {
 // Indexes a document supplied via a JSON object in the body.
 #[tracing::instrument(skip(writer_client, schema_loader))]
 pub async fn post_index(
-    writer_client: &DefaultClient,
+    writer_client: &dyn IndexWriterClient,
     schema_loader: &dyn SchemaLoader,
     request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {
@@ -33,11 +33,12 @@ pub async fn post_index(
         Err(err) => return err.into(),
     };
 
-    let mut batch = index_writer::batch(&path_params.index_id);
+    let mut job = Job::create(&path_params.index_id);
 
-    batch.index_doc(&schema, index_doc);
+    job.index_doc(&schema, index_doc);
 
-    writer_client.write_batch(batch).await;
+    // TODO: handle errors
+    writer_client.submit_job(job).await;
 
     http::success(&PostIndexResponse {
         doc_id,
@@ -68,7 +69,7 @@ mod tests {
             },
         );
 
-        let response = post_index(&client, &loader, request).await.unwrap();
+        let response = post_index(client.as_ref(), &loader, request).await.unwrap();
 
         let (code, _body) = parse_response::<json::Value>(response);
 
@@ -88,7 +89,7 @@ mod tests {
             },
         );
 
-        let response = post_index(&client, &loader, request).await.unwrap();
+        let response = post_index(client.as_ref(), &loader, request).await.unwrap();
 
         let (code, body) = parse_response::<json::Value>(response);
 
@@ -109,7 +110,7 @@ mod tests {
             },
         );
 
-        let response = post_index(&client, &loader, request).await.unwrap();
+        let response = post_index(client.as_ref(), &loader, request).await.unwrap();
 
         let (code, body) = parse_response::<json::Value>(response);
 
@@ -135,7 +136,7 @@ mod tests {
             },
         );
 
-        let response = post_index(&client, &loader, request).await.unwrap();
+        let response = post_index(client.as_ref(), &loader, request).await.unwrap();
 
         let (code, body) = parse_response::<json::Value>(response);
 

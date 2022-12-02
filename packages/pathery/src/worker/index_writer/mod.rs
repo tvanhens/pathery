@@ -93,13 +93,6 @@ pub async fn handle_event(
     Ok(())
 }
 
-pub fn batch(index_id: &str) -> Job {
-    Job {
-        index_id: index_id.into(),
-        ops: Vec::new(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -112,8 +105,8 @@ mod tests {
     use serde_json as json;
     use tantivy::Index;
 
+    use super::handle_event;
     use super::job::Job;
-    use super::{batch, handle_event};
     use crate::aws::{S3Bucket, S3Ref};
     use crate::schema::{SchemaExt, SchemaLoader, SchemaProvider};
 
@@ -157,7 +150,7 @@ mod tests {
     #[tokio::test]
     async fn test_indexing() {
         let index_provider = setup();
-        let mut op_batch = batch("test");
+        let mut op_batch = Job::create("test");
 
         let (_, document) = index_provider
             .schema()

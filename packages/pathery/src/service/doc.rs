@@ -3,8 +3,8 @@ use serde_json as json;
 
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::util;
-use crate::worker::index_writer;
-use crate::worker::index_writer::client::DefaultClient;
+use crate::worker::index_writer::client::IndexWriterClient;
+use crate::worker::index_writer::job::Job;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PathParams {
@@ -20,7 +20,7 @@ pub struct DeleteDocResponse {
 }
 
 pub async fn delete_doc(
-    client: &DefaultClient,
+    client: &dyn IndexWriterClient,
     request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {
     let (_body, path_params) = match request.into_parts() {
@@ -28,11 +28,11 @@ pub async fn delete_doc(
         Err(response) => return Ok(response),
     };
 
-    let mut batch = index_writer::batch(&path_params.index_id);
+    let mut job = Job::create(&path_params.index_id);
 
-    batch.delete_doc(&path_params.doc_id);
+    job.delete_doc(&path_params.doc_id);
 
-    client.write_batch(batch).await;
+    client.submit_job(job).await;
 
     http::success(&DeleteDocResponse {
         doc_id: path_params.doc_id,
