@@ -4,6 +4,7 @@ pub mod index;
 pub mod lambda;
 pub mod schema;
 pub mod service;
+mod store;
 pub mod util;
 pub mod worker;
 
