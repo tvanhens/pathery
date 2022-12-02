@@ -3,8 +3,9 @@ pub mod directory;
 pub mod index;
 pub mod lambda;
 pub mod schema;
+pub mod search_doc;
 pub mod service;
-mod store;
+pub mod store;
 pub mod util;
 pub mod worker;
 

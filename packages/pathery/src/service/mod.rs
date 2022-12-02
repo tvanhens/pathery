@@ -20,9 +20,9 @@ mod test_utils {
     pub(crate) use crate::json;
     use crate::lambda::http::{HandlerResponse, HttpRequest, ServiceRequest};
     use crate::schema::{SchemaLoader, SchemaProvider};
-    use crate::worker::index_writer::client::IndexWriterClient;
+    use crate::worker::index_writer::client::DefaultClient;
 
-    fn test_index_writer_client() -> IndexWriterClient {
+    fn test_index_writer_client() -> DefaultClient {
         struct TestBucketClient<O> {
             object_type: PhantomData<O>,
         }
@@ -54,7 +54,7 @@ mod test_utils {
             async fn send_message(&self, _group_id: &str, _message: &O) {}
         }
 
-        IndexWriterClient {
+        DefaultClient {
             bucket_client: Box::new(TestBucketClient {
                 object_type: PhantomData,
             }),
@@ -64,7 +64,7 @@ mod test_utils {
         }
     }
 
-    pub fn setup() -> (IndexWriterClient, SchemaProvider, Arc<Index>) {
+    pub fn setup() -> (DefaultClient, SchemaProvider, Arc<Index>) {
         let config = json::json!({
             "indexes": [
                 {

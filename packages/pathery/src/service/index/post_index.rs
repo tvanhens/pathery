@@ -4,7 +4,7 @@ use super::PathParams;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::schema::{SchemaExt, SchemaLoader};
 use crate::worker::index_writer;
-use crate::worker::index_writer::client::IndexWriterClient;
+use crate::worker::index_writer::client::DefaultClient;
 use crate::{json, util};
 
 #[derive(Serialize)]
@@ -17,7 +17,7 @@ pub struct PostIndexResponse {
 // Indexes a document supplied via a JSON object in the body.
 #[tracing::instrument(skip(writer_client, schema_loader))]
 pub async fn post_index(
-    writer_client: &IndexWriterClient,
+    writer_client: &DefaultClient,
     schema_loader: &dyn SchemaLoader,
     request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {

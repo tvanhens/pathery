@@ -9,45 +9,10 @@ use ddb::types::SdkError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DDBKey {
-    pub pk: String,
-    pub sk: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SearchDocId(String);
-
-impl From<DDBKey> for SearchDocId {
-    fn from(key: DDBKey) -> Self {
-        let doc_id = key
-            .pk
-            .split("|")
-            .nth(1)
-            .expect("key should be formatted correctly");
-
-        Self(doc_id.into())
-    }
-}
-
-impl From<SearchDocId> for DDBKey {
-    fn from(id: SearchDocId) -> Self {
-        DDBKey {
-            pk: format!("document|{}", id.0),
-            sk: format!("document|{}", id.0),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchDoc {
-    pub id: SearchDocId,
-    pub content: Vec<u8>,
-}
+use crate::search_doc::{DDBKey, SearchDoc, SearchDocId};
 
 #[derive(Debug, Error)]
-enum DocumentStoreError {
+pub enum DocumentStoreError {
     #[error("document store returned an incomplete response")]
     PartialResponse {
         documents: Vec<SearchDoc>,
@@ -106,13 +71,16 @@ impl From<serde_dynamo::Error> for DocumentStoreError {
 
 type Result<T> = StdResult<T, DocumentStoreError>;
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SearchDocRef(SearchDocId);
+
 #[async_trait]
-trait DocumentStore {
+pub trait DocumentStore: Send + Sync {
     /// Get a document by id.
     async fn get_documents(&self, ids: &[SearchDocId]) -> Result<Vec<SearchDoc>>;
 
     /// Save a document such that it can be retrieved with get_id.
-    async fn save_documents(&self, documents: &[SearchDoc]) -> Result<()>;
+    async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>>;
 }
 
 pub struct DDBDocumentStore {
@@ -167,10 +135,10 @@ impl DocumentStore for DDBDocumentStore {
         Ok(documents)
     }
 
-    async fn save_documents(&self, documents: &[SearchDoc]) -> Result<()> {
+    async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>> {
         let mut writes = vec![];
 
-        for document in documents {
+        for document in &documents {
             let item = serde_dynamo::to_item(document)?;
 
             let put_request = PutRequest::builder().set_item(Some(item)).build();
@@ -184,12 +152,27 @@ impl DocumentStore for DDBDocumentStore {
             .send()
             .await?;
 
-        Ok(())
+        Ok(documents
+            .into_iter()
+            .map(|doc| SearchDocRef(doc.id()))
+            .collect())
+    }
+}
+
+impl DDBDocumentStore {
+    pub async fn create(table_name: &str) -> DDBDocumentStore {
+        let sdk_config = aws_config::load_from_env().await;
+        let client = aws_sdk_dynamodb::Client::new(&sdk_config);
+
+        DDBDocumentStore {
+            table_name: table_name.into(),
+            client,
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod test_utils {
     #[test]
     fn save_documents_to_store() {}
 }

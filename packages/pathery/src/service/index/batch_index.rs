@@ -1,22 +1,24 @@
 use serde::Serialize;
 
 use super::PathParams;
+use crate::json;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
-use crate::schema::{SchemaExt, SchemaLoader};
-use crate::worker::index_writer;
+use crate::schema::SchemaLoader;
+use crate::search_doc::SearchDoc;
+use crate::store::document::DocumentStore;
 use crate::worker::index_writer::client::IndexWriterClient;
-use crate::{json, util};
+use crate::worker::index_writer::job::Job;
 
 #[derive(Serialize)]
 pub struct BatchIndexResponse {
-    #[serde(rename = "__id")]
-    pub updated_at: String,
+    pub job_id: String,
 }
 
 // Indexes a batch of documents
-#[tracing::instrument(skip(writer_client, schema_loader))]
+#[tracing::instrument(skip(index_writer, schema_loader, document_store))]
 pub async fn batch_index(
-    writer_client: &IndexWriterClient,
+    document_store: &dyn DocumentStore,
+    index_writer: &dyn IndexWriterClient,
     schema_loader: &dyn SchemaLoader,
     request: ServiceRequest<Vec<json::Value>, PathParams>,
 ) -> HandlerResult {
@@ -27,20 +29,41 @@ pub async fn batch_index(
 
     let schema = schema_loader.load_schema(&path_params.index_id);
 
-    let mut batch = index_writer::batch(&path_params.index_id);
+    let mut job = Job::create(&path_params.index_id);
 
-    for doc_obj in body.into_iter() {
-        let (_id, document) = match schema.to_document(doc_obj) {
-            Ok(doc) => doc,
-            Err(err) => return err.into(),
-        };
+    let documents = body
+        .into_iter()
+        .map(|value| SearchDoc::from_json(&schema, value))
+        .collect::<Vec<_>>();
 
-        batch.index_doc(&schema, document);
+    let errors = documents
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, result)| result.as_ref().err().map(|err| (idx, err)))
+        .collect::<Vec<_>>();
+
+    if errors.len() > 0 {
+        // TODO return an error response
+        todo!()
     }
 
-    writer_client.write_batch(batch).await;
+    let documents = documents
+        .into_iter()
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
 
-    http::success(&BatchIndexResponse {
-        updated_at: util::timestamp(),
-    })
+    let doc_refs = match document_store.save_documents(documents).await {
+        Ok(ids) => ids,
+        Err(_err) => todo!(),
+    };
+
+    job.index_batch(doc_refs);
+
+    match index_writer.submit_job(job).await {
+        Ok(job_id) => http::success(&BatchIndexResponse { job_id }),
+        _ => {
+            // TODO: handle submit job failure
+            todo!()
+        }
+    }
 }

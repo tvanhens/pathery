@@ -4,7 +4,7 @@ use serde_json as json;
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
 use crate::util;
 use crate::worker::index_writer;
-use crate::worker::index_writer::client::IndexWriterClient;
+use crate::worker::index_writer::client::DefaultClient;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PathParams {
@@ -20,7 +20,7 @@ pub struct DeleteDocResponse {
 }
 
 pub async fn delete_doc(
-    client: &IndexWriterClient,
+    client: &DefaultClient,
     request: ServiceRequest<json::Value, PathParams>,
 ) -> HandlerResult {
     let (_body, path_params) = match request.into_parts() {

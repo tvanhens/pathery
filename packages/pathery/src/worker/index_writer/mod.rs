@@ -1,12 +1,12 @@
 pub mod client;
-pub mod op;
+pub mod job;
 
 use std::collections::HashMap;
 
 use serde_json as json;
 use tantivy::{Document, IndexWriter, Term};
 
-use self::op::{IndexWriterOp, OpBatch};
+use self::job::{IndexWriterOp, Job};
 use crate::aws::{S3Bucket, S3Ref};
 use crate::index::{IndexExt, IndexLoader};
 use crate::lambda::{self, sqs};
@@ -36,7 +36,7 @@ fn index_doc(writer: &IndexWriter, doc: Document) {
 }
 
 pub async fn handle_event(
-    bucket_client: &dyn S3Bucket<OpBatch>,
+    bucket_client: &dyn S3Bucket<Job>,
     index_loader: &dyn IndexLoader,
     event: sqs::SqsEvent,
 ) -> Result<(), lambda::Error> {
@@ -71,7 +71,10 @@ pub async fn handle_event(
                 IndexWriterOp::IndexDoc { document } => {
                     index_doc(writer, schema.parse_document(&document).unwrap())
                 }
+
                 IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, &doc_id),
+
+                IndexWriterOp::IndexBatch { refs: _ } => todo!(),
             }
         }
 
@@ -90,8 +93,8 @@ pub async fn handle_event(
     Ok(())
 }
 
-pub fn batch(index_id: &str) -> OpBatch {
-    OpBatch {
+pub fn batch(index_id: &str) -> Job {
+    Job {
         index_id: index_id.into(),
         ops: Vec::new(),
     }
@@ -109,7 +112,7 @@ mod tests {
     use serde_json as json;
     use tantivy::Index;
 
-    use super::op::OpBatch;
+    use super::job::Job;
     use super::{batch, handle_event};
     use crate::aws::{S3Bucket, S3Ref};
     use crate::schema::{SchemaExt, SchemaLoader, SchemaProvider};
@@ -138,13 +141,13 @@ mod tests {
     }
 
     #[async_trait]
-    impl S3Bucket<OpBatch> for OpBatch {
-        async fn read_object(&self, _s3_ref: &S3Ref) -> Option<OpBatch> {
+    impl S3Bucket<Job> for Job {
+        async fn read_object(&self, _s3_ref: &S3Ref) -> Option<Job> {
             let serialized = json::to_string(self).unwrap();
             Some(json::from_str(&serialized).unwrap())
         }
 
-        async fn write_object(&self, _key: &str, _object: &OpBatch) -> Option<S3Ref> {
+        async fn write_object(&self, _key: &str, _object: &Job) -> Option<S3Ref> {
             todo!()
         }
 
