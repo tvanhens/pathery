@@ -152,7 +152,9 @@ mod tests {
 
     #[tokio::test]
     async fn query_default_response() {
-        let (_, _, index) = setup();
+        let TestContext { index_loader, .. } = setup();
+
+        let index = index_loader.load_index("test", None);
 
         let mut writer = index.default_writer();
 
@@ -199,7 +201,9 @@ mod tests {
 
     #[tokio::test]
     async fn query_document_with_un_indexed_fields() {
-        let (_, _, index) = setup();
+        let TestContext { index_loader, .. } = setup();
+
+        let index = index_loader.load_index("test", None);
 
         let mut writer = index.default_writer();
 

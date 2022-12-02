@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json as json;
 
 use crate::lambda::http::{self, HandlerResult, ServiceRequest};
-use crate::util;
+use crate::search_doc::SearchDocId;
 use crate::worker::index_writer::client::IndexWriterClient;
 use crate::worker::index_writer::job::Job;
 
@@ -14,9 +14,7 @@ pub struct PathParams {
 
 #[derive(Serialize)]
 pub struct DeleteDocResponse {
-    #[serde(rename = "__id")]
-    pub doc_id: String,
-    pub deleted_at: String,
+    pub job_id: String,
 }
 
 pub async fn delete_doc(
@@ -30,12 +28,12 @@ pub async fn delete_doc(
 
     let mut job = Job::create(&path_params.index_id);
 
-    job.delete_doc(&path_params.doc_id);
+    job.delete_doc(SearchDocId::parse(&path_params.doc_id));
 
-    client.submit_job(job).await;
+    let job_id = match client.submit_job(job).await {
+        Ok(job_id) => job_id,
+        Err(_) => todo!(),
+    };
 
-    http::success(&DeleteDocResponse {
-        doc_id: path_params.doc_id,
-        deleted_at: util::timestamp(),
-    })
+    http::success(&DeleteDocResponse { job_id })
 }

@@ -1,16 +1,13 @@
 use serde::{Deserialize, Serialize};
-use tantivy::schema::Schema;
-use tantivy::Document;
 
+use crate::search_doc::SearchDocId;
 use crate::store::document::SearchDocRef;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum IndexWriterOp {
-    IndexDoc { document: String },
+    IndexDoc { doc_ref: SearchDocRef },
 
-    IndexBatch { refs: Vec<SearchDocRef> },
-
-    DeleteDoc { doc_id: String },
+    DeleteDoc { doc_id: SearchDocId },
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -27,19 +24,11 @@ impl Job {
         }
     }
 
-    pub fn index_doc(&mut self, schema: &Schema, document: Document) {
-        self.ops.push(IndexWriterOp::IndexDoc {
-            document: schema.to_json(&document),
-        })
+    pub fn index_doc(&mut self, doc_ref: SearchDocRef) {
+        self.ops.push(IndexWriterOp::IndexDoc { doc_ref })
     }
 
-    pub fn delete_doc(&mut self, doc_id: &str) {
-        self.ops.push(IndexWriterOp::DeleteDoc {
-            doc_id: doc_id.into(),
-        })
-    }
-
-    pub fn index_batch(&mut self, doc_refs: Vec<SearchDocRef>) {
-        self.ops.push(IndexWriterOp::IndexBatch { refs: doc_refs });
+    pub fn delete_doc(&mut self, doc_id: SearchDocId) {
+        self.ops.push(IndexWriterOp::DeleteDoc { doc_id })
     }
 }

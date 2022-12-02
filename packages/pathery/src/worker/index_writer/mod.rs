@@ -7,9 +7,9 @@ use serde_json as json;
 use tantivy::{Document, IndexWriter, Term};
 
 use self::job::{IndexWriterOp, Job};
-use crate::aws::{S3Bucket, S3Ref};
 use crate::index::{IndexExt, IndexLoader};
 use crate::lambda::{self, sqs};
+use crate::store::document::{DocumentStore, SearchDocRef};
 
 fn delete_doc(writer: &IndexWriter, doc_id: &str) {
     let index = writer.index();
@@ -36,52 +36,54 @@ fn index_doc(writer: &IndexWriter, doc: Document) {
 }
 
 pub async fn handle_event(
-    bucket_client: &dyn S3Bucket<Job>,
+    document_store: &dyn DocumentStore,
     index_loader: &dyn IndexLoader,
     event: sqs::SqsEvent,
 ) -> Result<(), lambda::Error> {
     let records = event.payload.records;
 
-    let messages = records
+    let jobs = records
         .iter()
         .map(|message| message.body.as_ref().expect("Body should be present"))
         .map(|body| {
             let msg =
-                json::from_str::<S3Ref>(body.as_str()).expect("Message should be deserializable");
+                json::from_str::<Job>(body.as_str()).expect("Message should be deserializable");
             msg
         })
         .collect::<Vec<_>>();
 
     let mut writers: HashMap<String, IndexWriter> = HashMap::new();
 
-    for s3_ref in messages {
-        let batch = bucket_client
-            .read_object(&s3_ref)
-            .await
-            .expect("batch should load");
-        let index_id = batch.index_id;
+    for job in jobs {
+        let index_id = job.index_id;
         let writer = writers
             .entry(index_id.to_string())
             .or_insert_with(|| index_loader.load_index(&index_id, None).default_writer());
 
         let schema = writer.index().schema();
 
-        for op in batch.ops {
+        let mut doc_refs: Vec<SearchDocRef> = vec![];
+
+        for op in job.ops {
             match op {
-                IndexWriterOp::IndexDoc { document } => {
-                    index_doc(writer, schema.parse_document(&document).unwrap())
-                }
+                IndexWriterOp::IndexDoc { doc_ref } => doc_refs.push(doc_ref),
 
-                IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, &doc_id),
-
-                IndexWriterOp::IndexBatch { refs: _ } => todo!(),
+                IndexWriterOp::DeleteDoc { doc_id } => delete_doc(writer, doc_id.id()),
             }
+        }
+
+        let docs = match document_store.get_documents(doc_refs).await {
+            Ok(docs) => docs,
+            Err(_) => todo!(),
+        };
+
+        for doc in docs {
+            let document = doc.document(&schema);
+            index_doc(writer, document);
         }
 
         writer.commit().expect("commit should succeed");
         tracing::info!(message = "index_committed", index_id);
-
-        bucket_client.delete_object(&s3_ref).await;
     }
 
     for (_index_id, writer) in writers.into_iter() {
@@ -96,79 +98,44 @@ pub async fn handle_event(
 #[cfg(test)]
 mod tests {
 
-    use std::sync::Arc;
-
-    use async_trait::async_trait;
     use aws_lambda_events::sqs::{self, SqsMessage};
     use lambda_http::Context;
     use lambda_runtime::LambdaEvent;
-    use serde_json as json;
-    use tantivy::Index;
 
     use super::handle_event;
     use super::job::Job;
-    use crate::aws::{S3Bucket, S3Ref};
-    use crate::schema::{SchemaExt, SchemaLoader, SchemaProvider};
-
-    pub fn setup() -> Arc<Index> {
-        let config = json::json!({
-            "indexes": [
-                {
-                    "prefix": "test",
-                    "fields": [
-                        {
-                            "name": "year",
-                            "kind": "i64",
-                            "flags": ["INDEXED", "STORED"]
-                        }
-                    ]
-                }
-            ]
-        });
-
-        let schema_provider = SchemaProvider::from_json(config);
-
-        let index = Index::create_in_ram(schema_provider.load_schema("test"));
-
-        Arc::new(index)
-    }
-
-    #[async_trait]
-    impl S3Bucket<Job> for Job {
-        async fn read_object(&self, _s3_ref: &S3Ref) -> Option<Job> {
-            let serialized = json::to_string(self).unwrap();
-            Some(json::from_str(&serialized).unwrap())
-        }
-
-        async fn write_object(&self, _key: &str, _object: &Job) -> Option<S3Ref> {
-            todo!()
-        }
-
-        async fn delete_object(&self, _s3_ref: &S3Ref) {}
-    }
+    use crate::search_doc::SearchDoc;
+    use crate::test_utils::*;
 
     #[tokio::test]
     async fn test_indexing() {
-        let index_provider = setup();
-        let mut op_batch = Job::create("test");
+        let TestContext {
+            document_store,
+            index_loader,
+            schema_loader,
+            ..
+        } = setup();
 
-        let (_, document) = index_provider
-            .schema()
-            .to_document(json::json!({
+        let schema = schema_loader.load_schema("test");
+
+        let mut job = Job::create("test");
+
+        let document = SearchDoc::from_json(
+            &schema,
+            json!({
                 "year": 1989
-            }))
-            .unwrap();
+            }),
+        )
+        .unwrap();
 
-        op_batch.index_doc(&index_provider.schema(), document);
+        let doc_refs = document_store.save_documents(vec![document]).await.unwrap();
+
+        for doc_ref in doc_refs {
+            job.index_doc(doc_ref);
+        }
 
         let message = SqsMessage {
-            body: Some(
-                json::to_string(&S3Ref {
-                    bucket: String::from(""),
-                    key: String::from(""),
-                })
-                .unwrap(),
-            ),
+            body: Some(json::to_string(&job).unwrap()),
             ..Default::default()
         };
 
@@ -177,11 +144,15 @@ mod tests {
         };
 
         handle_event(
-            &op_batch,
-            &index_provider,
+            document_store.as_ref(),
+            index_loader.as_ref(),
             LambdaEvent::new(event, Context::default()),
         )
         .await
         .unwrap();
+
+        let index = index_loader.load_index("test", None);
+
+        assert_eq!(1, index.reader().unwrap().searcher().num_docs());
     }
 }

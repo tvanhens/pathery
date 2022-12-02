@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tantivy::schema::{DocParsingError, Schema};
+use tantivy::Document;
 use thiserror::Error;
 
 use crate::util;
@@ -13,8 +14,11 @@ pub enum SearchDocError {
     #[error("invalid type for __id, expected string")]
     InvalidIdType,
 
-    #[error("document does not match schema: {0:?}")]
+    #[error("{0}")]
     SchemaValidationError(String),
+
+    #[error("cannot index empty document")]
+    EmptyDocument,
 }
 
 impl From<DocParsingError> for SearchDocError {
@@ -38,7 +42,7 @@ impl From<SearchDocId> for DDBKey {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct SearchDocId(String);
 
@@ -54,7 +58,17 @@ impl From<DDBKey> for SearchDocId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+impl SearchDocId {
+    pub fn parse(id: &str) -> SearchDocId {
+        SearchDocId(id.into())
+    }
+
+    pub fn id(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SearchDoc {
     id: SearchDocId,
     content: Map<String, Value>,
@@ -77,7 +91,11 @@ impl SearchDoc {
             .to_string();
 
         // Validate the document against the provided schema.
-        schema.json_object_to_doc(json_object.clone())?;
+        let document = schema.json_object_to_doc(json_object.clone())?;
+
+        if document.field_values().len() <= 1 {
+            return Err(SearchDocError::EmptyDocument);
+        }
 
         Ok(SearchDoc {
             id: SearchDocId(id),
@@ -85,8 +103,14 @@ impl SearchDoc {
         })
     }
 
-    pub fn id(self) -> SearchDocId {
-        self.id
+    pub fn id(&self) -> &SearchDocId {
+        &self.id
+    }
+
+    pub fn document(self, schema: &Schema) -> Document {
+        schema
+            .json_object_to_doc(self.content)
+            .expect("should succeed since from_json validates")
     }
 }
 
@@ -98,6 +122,7 @@ mod tests {
 
     fn setup() -> Schema {
         let mut schema = Schema::builder();
+        schema.add_text_field("__id", schema::STRING);
         schema.add_text_field("name", schema::STRING);
         schema.build()
     }
@@ -106,7 +131,7 @@ mod tests {
     fn from_json_generates_id() {
         let schema = setup();
         let value = json!({
-            "hello": "world"
+            "name": "world"
         });
 
         let search_doc = SearchDoc::from_json(&schema, value).unwrap();
@@ -118,11 +143,11 @@ mod tests {
     fn from_json_uses_id_when_exists() {
         let schema = setup();
         let id = util::generate_id();
-        let value = json!({ "__id": id });
+        let value = json!({ "__id": id, "name": "world" });
 
         let search_doc = SearchDoc::from_json(&schema, value).unwrap();
 
-        assert_eq!(search_doc.id.0, id);
+        assert_eq!(id, search_doc.id.0);
     }
 
     #[test]
@@ -133,12 +158,12 @@ mod tests {
         let search_doc = SearchDoc::from_json(&schema, value).unwrap_err();
 
         assert_eq!(
-            search_doc,
             SearchDocError::SchemaValidationError(
                 "The field '\"name\"' could not be parsed: TypeError { expected: \"a string\", \
                  json: Number(1234) }"
                     .into()
-            )
+            ),
+            search_doc,
         );
     }
 }

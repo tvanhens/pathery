@@ -69,7 +69,9 @@ pub async fn batch_index(
         Err(err) => return Ok(err.into()),
     };
 
-    job.index_batch(doc_refs);
+    for doc_ref in doc_refs {
+        job.index_doc(doc_ref)
+    }
 
     match index_writer.submit_job(job).await {
         Ok(job_id) => http::success(&BatchIndexResponse { job_id }),

@@ -82,7 +82,7 @@ pub struct SearchDocRef(SearchDocId);
 #[async_trait]
 pub trait DocumentStore: Send + Sync {
     /// Get a document by id.
-    async fn get_documents(&self, ids: &[SearchDocId]) -> Result<Vec<SearchDoc>>;
+    async fn get_documents(&self, refs: Vec<SearchDocRef>) -> Result<Vec<SearchDoc>>;
 
     /// Save a document such that it can be retrieved with get_id.
     async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>>;
@@ -95,13 +95,13 @@ pub struct DDBDocumentStore {
 
 #[async_trait]
 impl DocumentStore for DDBDocumentStore {
-    async fn get_documents(&self, ids: &[SearchDocId]) -> Result<Vec<SearchDoc>> {
+    async fn get_documents(&self, refs: Vec<SearchDocRef>) -> Result<Vec<SearchDoc>> {
         let mut request = self.client.batch_get_item();
 
         let mut keys_and_attrs = KeysAndAttributes::builder();
 
-        for id in ids {
-            let key = DDBKey::from(id.clone());
+        for doc_ref in refs {
+            let key = DDBKey::from(doc_ref.0);
             keys_and_attrs = keys_and_attrs.keys(serde_dynamo::to_item(key)?);
         }
 
@@ -159,7 +159,7 @@ impl DocumentStore for DDBDocumentStore {
 
         Ok(documents
             .into_iter()
-            .map(|doc| SearchDocRef(doc.id()))
+            .map(|doc| SearchDocRef(doc.id().clone()))
             .collect())
     }
 }
@@ -173,5 +173,50 @@ impl DDBDocumentStore {
         let client = aws_sdk_dynamodb::Client::new(&sdk_config);
 
         DDBDocumentStore { table_name, client }
+    }
+}
+
+#[cfg(test)]
+pub mod test_util {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    pub struct TestDocumentStore {
+        db: Arc<Mutex<HashMap<SearchDocId, SearchDoc>>>,
+    }
+
+    #[async_trait]
+    impl DocumentStore for TestDocumentStore {
+        async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>> {
+            let mut db = self.db.lock().unwrap();
+
+            for document in &documents {
+                (*db).insert(document.id().clone(), document.clone());
+            }
+
+            Ok(documents
+                .iter()
+                .map(|x| SearchDocRef(x.id().clone()))
+                .collect())
+        }
+
+        async fn get_documents(&self, refs: Vec<SearchDocRef>) -> Result<Vec<SearchDoc>> {
+            let db = self.db.lock().unwrap();
+
+            Ok(refs
+                .iter()
+                .map(|doc_ref| (*db).get(&doc_ref.0).unwrap().clone())
+                .collect())
+        }
+    }
+
+    impl TestDocumentStore {
+        pub fn create() -> Self {
+            TestDocumentStore {
+                db: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
     }
 }
