@@ -9,8 +9,7 @@ use pathery::worker::index_writer::client::LambdaIndexWriterClient;
 async fn main() -> Result<(), lambda_http::Error> {
     lambda::init_tracing();
 
-    // TODO: Set table name
-    let document_store = DDBDocumentStore::create(todo!()).await;
+    let document_store = DDBDocumentStore::create(None).await;
     let writer_client = LambdaIndexWriterClient::create();
     let schema_loader = SchemaProvider::lambda();
 

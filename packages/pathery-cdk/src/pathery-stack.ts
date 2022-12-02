@@ -21,6 +21,12 @@ import * as fs from "fs";
 import { RustFunction } from "./rust-function";
 import { PatheryDashboard } from "./pathery-dashboard";
 import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
+import {
+  AttributeType,
+  BillingMode,
+  ITable,
+  Table,
+} from "aws-cdk-lib/aws-dynamodb";
 
 export interface PatheryStackProps {
   config: PatheryConfig;
@@ -62,12 +68,27 @@ export class PatheryStack extends Stack {
 
   readonly apiGateway: RestApi;
 
+  private readonly table: ITable;
+
   private bucket: IBucket;
 
   private indexWriterQueue: IQueue;
 
   constructor(scope: Construct, id: string, props: PatheryStackProps) {
     super(scope, id);
+
+    this.table = new Table(this, "DataTable", {
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      partitionKey: {
+        name: "pk",
+        type: AttributeType.STRING,
+      },
+      sortKey: {
+        name: "sk",
+        type: AttributeType.STRING,
+      },
+      timeToLiveAttribute: "__ttl",
+    });
 
     this.bucket = new Bucket(this, "DataBucket");
 
@@ -215,6 +236,8 @@ export class PatheryStack extends Stack {
       "DATA_BUCKET_NAME",
       this.bucket.bucketName
     );
+    this.table.grantReadWriteData(indexWriterWorker);
+    indexWriterWorker.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
 
     new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,
@@ -228,6 +251,9 @@ export class PatheryStack extends Stack {
   private indexWriterProducer(lambda: Function) {
     this.bucket.grantWrite(lambda);
     lambda.addEnvironment("DATA_BUCKET_NAME", this.bucket.bucketName);
+
+    this.table.grantWriteData(lambda);
+    lambda.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
 
     this.indexWriterQueue.grantSendMessages(lambda);
     lambda.addEnvironment(

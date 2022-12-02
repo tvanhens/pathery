@@ -12,3 +12,7 @@ pub fn timestamp() -> String {
     let now: DateTime<Utc> = now.into();
     now.to_rfc3339()
 }
+
+pub fn require_env(var_name: &str) -> String {
+    std::env::var(var_name).expect(&format!("{var_name:?} should be set"))
+}

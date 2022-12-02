@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::search_doc::{DDBKey, SearchDoc, SearchDocId};
+use crate::util;
 
 #[derive(Debug, Error)]
 pub enum DocumentStoreError {
@@ -160,19 +161,13 @@ impl DocumentStore for DDBDocumentStore {
 }
 
 impl DDBDocumentStore {
-    pub async fn create(table_name: &str) -> DDBDocumentStore {
+    pub async fn create(table_name: Option<&str>) -> DDBDocumentStore {
+        let table_name = table_name
+            .map(String::from)
+            .unwrap_or_else(|| util::require_env("DATA_TABLE_NAME"));
         let sdk_config = aws_config::load_from_env().await;
         let client = aws_sdk_dynamodb::Client::new(&sdk_config);
 
-        DDBDocumentStore {
-            table_name: table_name.into(),
-            client,
-        }
+        DDBDocumentStore { table_name, client }
     }
-}
-
-#[cfg(test)]
-mod test_utils {
-    #[test]
-    fn save_documents_to_store() {}
 }
