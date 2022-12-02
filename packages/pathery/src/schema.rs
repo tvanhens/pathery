@@ -7,7 +7,6 @@ use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TextFieldOption {
-    STORED,
     TEXT,
     STRING,
     FAST,
@@ -15,7 +14,6 @@ pub enum TextFieldOption {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum NumericFieldOption {
-    STORED,
     INDEXED,
     FAST,
 }
@@ -69,7 +67,6 @@ fn numeric_field_options(flags: &Vec<NumericFieldOption>) -> NumericOptions {
     flags
         .iter()
         .fold(NumericOptions::default(), |acc, opt| match opt {
-            NumericFieldOption::STORED => acc | schema::STORED,
             NumericFieldOption::INDEXED => acc | schema::INDEXED,
             NumericFieldOption::FAST => acc | schema::FAST,
         })
@@ -124,7 +121,6 @@ impl SchemaLoader for SchemaProvider {
                             .iter()
                             .fold(TextOptions::default(), |acc, opt| match opt {
                                 TextFieldOption::TEXT => acc | schema::TEXT,
-                                TextFieldOption::STORED => acc | schema::STORED,
                                 TextFieldOption::STRING => acc | schema::STRING,
                                 TextFieldOption::FAST => acc | schema::FAST,
                             });
@@ -162,22 +158,22 @@ mod tests {
                     "fields": [
                         {
                             "name": "title",
-                            "flags": ["STORED", "TEXT"],
+                            "flags": ["TEXT"],
                             "kind": "text",
                         },
                         {
                             "name": "author",
-                            "flags": ["STORED", "STRING"],
+                            "flags": ["STRING"],
                             "kind": "text",
                         },
                         {
                             "name": "date_added",
-                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "flags": ["INDEXED", "FAST"],
                             "kind": "date",
                         },
                         {
                             "name": "year",
-                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "flags": ["INDEXED", "FAST"],
                             "kind": "i64",
                         },
                     ],

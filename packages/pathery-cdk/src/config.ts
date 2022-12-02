@@ -22,7 +22,6 @@ export interface FieldConfig<K, Flags> {
    *
    * Flag descriptions:
    *
-   * `STORED`  - Stores the original content for this field, allowing full retrieval and snippet generation.
    *
    * `TEXT`    - (only for `text`) Marks this field for full-text indexing.
    *
@@ -33,20 +32,11 @@ export interface FieldConfig<K, Flags> {
   flags: Flags[];
 }
 
-export type TextFieldConfig = FieldConfig<
-  "text",
-  "STORED" | "STRING" | "TEXT" | "FAST"
->;
+export type TextFieldConfig = FieldConfig<"text", "STRING" | "TEXT" | "FAST">;
 
-export type DateFieldConfig = FieldConfig<
-  "date",
-  "STORED" | "INDEXED" | "FAST"
->;
+export type DateFieldConfig = FieldConfig<"date", "INDEXED" | "FAST">;
 
-export type IntegerFieldConfig = FieldConfig<
-  "i64",
-  "STORED" | "INDEXED" | "FAST"
->;
+export type IntegerFieldConfig = FieldConfig<"i64", "INDEXED" | "FAST">;
 
 export type IndexFieldConfig =
   | TextFieldConfig
@@ -83,7 +73,7 @@ export interface IndexConfig {
    *   name: "isbn",
    *   kind: "text",
    *   // Note "STRING" here which indexes the field as one string (e.g. no splitting).
-   *   flags: ["STORED", "STRING"]
+   *   flags: ["STRING"]
    * }
    * ```
    *
@@ -95,7 +85,7 @@ export interface IndexConfig {
    *   name: "description",
    *   kind: "text",
    *   // Note "TEXT" flag which indexes the field as a full-text field splitting on characters such as spaces.
-   *   flags: ["STORED", "TEXT"]
+   *   flags: ["TEXT"]
    * }
    * ```
    */
