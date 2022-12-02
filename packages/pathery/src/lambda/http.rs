@@ -55,7 +55,8 @@ where
                 json::Value::Array(values) => (
                     k,
                     values
-                        .into_iter().next()
+                        .into_iter()
+                        .next()
                         .expect("param should have a value"),
                 ),
                 _ => panic!("keys should be array values"),

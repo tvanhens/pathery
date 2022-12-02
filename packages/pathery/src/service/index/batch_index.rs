@@ -2,16 +2,22 @@ use serde::Serialize;
 
 use super::PathParams;
 use crate::json;
-use crate::lambda::http::{self, HandlerResult, ServiceRequest};
+use crate::lambda::http::{self, err_response, HandlerResponse, HandlerResult, ServiceRequest};
 use crate::schema::SchemaLoader;
 use crate::search_doc::SearchDoc;
-use crate::store::document::DocumentStore;
+use crate::store::document::{DocumentStore, DocumentStoreError};
 use crate::worker::index_writer::client::IndexWriterClient;
 use crate::worker::index_writer::job::Job;
 
 #[derive(Serialize)]
 pub struct BatchIndexResponse {
     pub job_id: String,
+}
+
+impl From<DocumentStoreError> for HandlerResponse {
+    fn from(err: DocumentStoreError) -> Self {
+        err_response(500, &format!("Error storing document: {}", err.to_string()))
+    }
 }
 
 // Indexes a batch of documents
@@ -36,15 +42,21 @@ pub async fn batch_index(
         .map(|value| SearchDoc::from_json(&schema, value))
         .collect::<Vec<_>>();
 
-    let errors = documents
+    let error = documents
         .iter()
         .enumerate()
         .filter_map(|(idx, result)| result.as_ref().err().map(|err| (idx, err)))
         .collect::<Vec<_>>();
 
-    if errors.len() > 0 {
-        // TODO return an error response
-        todo!()
+    if let Some((idx, error)) = error.first() {
+        return Ok(err_response(
+            400,
+            &format!(
+                "Error parsing document (path: [{}]): {}",
+                idx,
+                error.to_string()
+            ),
+        ));
     }
 
     let documents = documents
@@ -53,17 +65,14 @@ pub async fn batch_index(
         .collect::<Vec<_>>();
 
     let doc_refs = match document_store.save_documents(documents).await {
-        Ok(ids) => ids,
-        Err(_err) => todo!(),
+        Ok(refs) => refs,
+        Err(err) => return Ok(err.into()),
     };
 
     job.index_batch(doc_refs);
 
     match index_writer.submit_job(job).await {
         Ok(job_id) => http::success(&BatchIndexResponse { job_id }),
-        _ => {
-            // TODO: handle submit job failure
-            todo!()
-        }
+        _ => Ok(err_response(500, "Error submitting job")),
     }
 }

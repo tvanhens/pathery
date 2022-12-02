@@ -15,10 +15,7 @@ use crate::util;
 #[derive(Debug, Error)]
 pub enum DocumentStoreError {
     #[error("document store returned an incomplete response")]
-    PartialResponse {
-        documents: Vec<SearchDoc>,
-        unprocessed_ids: Vec<SearchDocId>,
-    },
+    PartialSuccess,
 
     #[error("request exceeded the rate limit")]
     RequestRateLimitExceeded,
@@ -57,8 +54,15 @@ impl From<BatchGetItemError> for DocumentStoreError {
 }
 
 impl From<BatchWriteItemError> for DocumentStoreError {
-    fn from(_sdk_err: BatchWriteItemError) -> Self {
-        todo!()
+    fn from(err: BatchWriteItemError) -> Self {
+        match err.kind {
+            ddb::error::BatchWriteItemErrorKind::RequestLimitExceeded(_) => {
+                DocumentStoreError::RequestRateLimitExceeded
+            }
+            _ => DocumentStoreError::UnexpectedError {
+                reason: err.to_string(),
+            },
+        }
     }
 }
 
@@ -105,32 +109,24 @@ impl DocumentStore for DDBDocumentStore {
 
         let response = request.send().await?;
 
-        let documents: StdResult<Vec<SearchDoc>, _> = response
+        let documents = response
             .responses()
             .expect("responses should be present")
             .values()
             .flatten()
             .map(|item| serde_dynamo::from_item(item.clone()))
-            .collect();
+            .collect::<StdResult<Vec<SearchDoc>, _>>()?;
 
-        let documents = documents?;
-
-        let unprocessed_ids: StdResult<Vec<_>, _> = response
+        let unprocessed_ids = response
             .unprocessed_keys()
             .expect("unprocessed keys should be present")
             .values()
             .filter_map(KeysAndAttributes::keys)
             .flatten()
-            .map(|item| serde_dynamo::from_item(item.clone()))
-            .collect();
-
-        let unprocessed_ids = unprocessed_ids?;
+            .collect::<Vec<_>>();
 
         if unprocessed_ids.len() > 0 {
-            return Err(DocumentStoreError::PartialResponse {
-                documents,
-                unprocessed_ids,
-            });
+            return Err(DocumentStoreError::PartialSuccess);
         }
 
         Ok(documents)
@@ -147,11 +143,19 @@ impl DocumentStore for DDBDocumentStore {
             writes.push(WriteRequest::builder().put_request(put_request).build())
         }
 
-        self.client
+        let response = self
+            .client
             .batch_write_item()
             .request_items(&self.table_name, writes)
             .send()
             .await?;
+
+        if let Some(items) = response.unprocessed_items() {
+            let unhandled_writes = items.values().flatten().collect::<Vec<_>>();
+            if unhandled_writes.len() > 0 {
+                return Err(DocumentStoreError::PartialSuccess);
+            }
+        };
 
         Ok(documents
             .into_iter()
