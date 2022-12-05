@@ -2,7 +2,6 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use tantivy::merge_policy::NoMergePolicy;
 use tantivy::schema::Field;
 use tantivy::{Index, IndexWriter};
 
@@ -61,9 +60,6 @@ impl IndexExt for Index {
         let writer = self
             .writer(100_000_000)
             .expect("Writer should be available");
-
-        let merge_policy = NoMergePolicy;
-        writer.set_merge_policy(Box::new(merge_policy));
 
         writer
     }

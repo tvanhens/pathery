@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use serde_json as json;
 use tantivy::{Document, IndexWriter, Term};
+use tracing::info;
 
 use self::job::{IndexWriterOp, Job};
 use crate::index::{IndexExt, IndexLoader};
@@ -36,8 +37,6 @@ fn index_doc(writer: &IndexWriter, doc: Document) {
 }
 
 pub async fn handle_job(writer: &mut IndexWriter, document_store: &dyn DocumentStore, job: Job) {
-    let index_id = job.index_id;
-
     let schema = writer.index().schema();
 
     let mut doc_refs: Vec<SearchDocRef> = vec![];
@@ -56,9 +55,6 @@ pub async fn handle_job(writer: &mut IndexWriter, document_store: &dyn DocumentS
         let document = doc.document(&schema);
         index_doc(writer, document);
     }
-
-    writer.commit().expect("commit should succeed");
-    tracing::info!(message = "index_committed", index_id);
 }
 
 pub async fn handle_event(
@@ -89,7 +85,9 @@ pub async fn handle_event(
         handle_job(&mut writer, document_store, job).await;
     }
 
-    for writer in writers.into_values() {
+    for (index, mut writer) in writers.into_iter() {
+        writer.commit().expect("commit should succeed");
+        info!(message = "index_commit", index);
         writer
             .wait_merging_threads()
             .expect("merge should finish without error");

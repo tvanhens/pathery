@@ -40,6 +40,14 @@ importers:
       axios: 1.2.0
       esbuild: 0.15.16
 
+  integration-test:
+    specifiers:
+      aws-sdk: ^2.1262.0
+      axios: ^1.2.0
+    dependencies:
+      aws-sdk: 2.1262.0
+      axios: 1.2.0
+
   packages/pathery-cdk:
     specifiers: {}
 

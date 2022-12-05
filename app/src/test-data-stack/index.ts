@@ -1,7 +1,5 @@
-import { Duration, Stack } from "aws-cdk-lib";
-import { ApiKey, IRestApi, RestApi } from "aws-cdk-lib/aws-apigateway";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { CfnOutput, Stack } from "aws-cdk-lib";
+import { ApiKey, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
@@ -17,17 +15,8 @@ export class TestDataStack extends Stack {
 
     const dataBucket = new Bucket(this, "DataBucket");
 
-    const reIndexer = new NodejsFunction(this, "re-indexer", {
-      memorySize: 1000,
-      timeout: Duration.minutes(15),
-      architecture: Architecture.ARM_64,
+    new CfnOutput(this, "DataBucketName", {
+      value: dataBucket.bucketName,
     });
-    dataBucket.grantRead(reIndexer);
-    props.apiKey.grantRead(reIndexer);
-    reIndexer.addEnvironment("DATA_BUCKET", dataBucket.bucketName);
-    reIndexer.addEnvironment("INDEX_NAME", "libgen-index-v1");
-    reIndexer.addEnvironment("PATHERY_BASE_URL", props.patheryApi.url);
-    reIndexer.addEnvironment("BATCH_SIZE", "1000");
-    reIndexer.addEnvironment("API_KEY_ID", props.apiKey.keyId);
   }
 }
