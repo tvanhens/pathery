@@ -7,7 +7,7 @@ const bucketName = "pathery-test-data-databuckete3889a50-11yc5palv3nvl";
 const batchSize = 25;
 const patheryEndpoint =
   "https://nlztni8cx5.execute-api.us-east-1.amazonaws.com/prod/";
-const index_id = "libgen-index-v2";
+const index_id = "libgen-index-v2-1";
 const apiKeyId = "7xyag5xp0d";
 
 const api = new AWS.APIGateway();

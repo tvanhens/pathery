@@ -46,7 +46,4 @@ const pathery = new PatheryStack(app, "pathery-dev", {
   },
 });
 
-new TestDataStack(app, "pathery-test-data", {
-  apiKey: pathery.apiKey,
-  patheryApi: pathery.apiGateway,
-});
+new TestDataStack(app, "pathery-test-data");

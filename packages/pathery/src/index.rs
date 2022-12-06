@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use tantivy::merge_policy::DefaultMergePolicy;
 use tantivy::schema::Field;
 use tantivy::{Index, IndexWriter};
 
@@ -28,7 +29,7 @@ impl IndexLoader for IndexProvider {
     fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Arc<Index> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
-        let index =
+        let mut index =
             if let Ok(existing_dir) = PatheryDirectory::open(&directory_path, with_partition) {
                 Index::open(existing_dir).expect("Index should be openable")
             } else {
@@ -37,6 +38,10 @@ impl IndexLoader for IndexProvider {
                 Index::create_in_dir(Path::new(&directory_path), schema)
                     .expect("Index should be creatable")
             };
+
+        index
+            .set_default_multithread_executor()
+            .expect("default multithread executor should succeed");
 
         Arc::new(index)
     }
@@ -60,6 +65,11 @@ impl IndexExt for Index {
         let writer = self
             .writer(100_000_000)
             .expect("Writer should be available");
+
+        let mut merge_policy = DefaultMergePolicy::default();
+        merge_policy.set_max_docs_before_merge(10_000);
+
+        writer.set_merge_policy(Box::new(merge_policy));
 
         writer
     }

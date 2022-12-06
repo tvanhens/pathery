@@ -167,6 +167,18 @@ export class PatheryStack extends Stack {
     this.table.grantReadData(queryIndex);
     queryIndex.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
 
+    const statsIndex = new RustFunction(this, "stats-index", {
+      vpc,
+      vpcSubnets: {
+        subnets: vpc.isolatedSubnets,
+      },
+      filesystem: aws_lambda.FileSystem.fromEfsAccessPoint(
+        accessPoint,
+        "/mnt/pathery-data"
+      ),
+    });
+    statsIndex.addLayers(configLayer);
+
     const deleteDoc = new RustFunction(this, "delete-doc");
     deleteDoc.addLayers(configLayer);
     this.indexWriterProducer(deleteDoc);
@@ -207,6 +219,10 @@ export class PatheryStack extends Stack {
     const queryActionRoute = indexSingleRoute.addResource("query");
 
     queryActionRoute.addMethod("POST", new LambdaIntegration(queryIndex));
+
+    const statsActionRoute = indexSingleRoute.addResource("stats");
+
+    statsActionRoute.addMethod("GET", new LambdaIntegration(statsIndex));
 
     const batchIndexRoute = indexSingleRoute.addResource("batch");
 
