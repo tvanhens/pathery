@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use super::job::Job;
+use crate::service::ServiceError;
 use crate::util;
 
 #[derive(Debug, Error)]
@@ -9,7 +10,7 @@ pub enum IndexWriterClientError {}
 
 #[async_trait]
 pub trait IndexWriterClient: Sync + Send {
-    async fn submit_job(&self, job: Job) -> Result<String, IndexWriterClientError>;
+    async fn submit_job(&self, job: Job) -> Result<String, ServiceError>;
 }
 
 pub struct LambdaIndexWriterClient {
@@ -19,7 +20,7 @@ pub struct LambdaIndexWriterClient {
 
 #[async_trait]
 impl IndexWriterClient for LambdaIndexWriterClient {
-    async fn submit_job(&self, job: Job) -> Result<String, IndexWriterClientError> {
+    async fn submit_job(&self, job: Job) -> Result<String, ServiceError> {
         let body = serde_json::to_string(&job).expect("job should serialize");
 
         let response = self
@@ -54,37 +55,40 @@ impl LambdaIndexWriterClient {
 
 #[cfg(test)]
 pub mod test_utils {
-    use std::sync::Arc;
-
-    use tantivy::Index;
-
     use super::*;
-    use crate::index::IndexExt;
+    use crate::index::test_util::TestIndexLoader;
+    use crate::index::{IndexExt, IndexLoader};
     use crate::store::document::test_util::TestDocumentStore;
     use crate::util;
     use crate::worker::index_writer::handle_job;
 
+    #[derive(Clone)]
     pub struct TestIndexWriterClient {
-        index: Arc<Index>,
-        document_store: Arc<TestDocumentStore>,
+        index_loader: TestIndexLoader,
+
+        document_store: TestDocumentStore,
     }
 
     #[async_trait]
     impl IndexWriterClient for TestIndexWriterClient {
-        async fn submit_job(&self, job: Job) -> Result<String, IndexWriterClientError> {
-            let mut writer = self.index.default_writer();
+        async fn submit_job(&self, job: Job) -> Result<String, ServiceError> {
+            let index = self.index_loader.load_index(&job.index_id, None);
 
-            handle_job(&mut writer, self.document_store.as_ref(), job).await;
+            let mut writer = index.default_writer();
+
+            handle_job(&mut writer, &self.document_store, job).await;
+
+            writer.commit().unwrap();
 
             Ok(util::generate_id())
         }
     }
 
     impl TestIndexWriterClient {
-        pub fn create(index: &Arc<Index>, document_store: &Arc<TestDocumentStore>) -> Self {
+        pub fn create(index_loader: TestIndexLoader, document_store: TestDocumentStore) -> Self {
             TestIndexWriterClient {
-                index: Arc::clone(index),
-                document_store: Arc::clone(document_store),
+                index_loader,
+                document_store,
             }
         }
     }

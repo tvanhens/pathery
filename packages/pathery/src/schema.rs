@@ -5,20 +5,20 @@ use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
 use thiserror::Error;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TextFieldOption {
     TEXT,
     STRING,
     FAST,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum NumericFieldOption {
     INDEXED,
     FAST,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "kind")]
 pub enum FieldConfig {
     #[serde(rename = "text")]
@@ -38,13 +38,13 @@ pub enum FieldConfig {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IndexConfig {
     prefix: String,
     fields: Vec<FieldConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PatheryConfig {
     indexes: Vec<IndexConfig>,
 }
@@ -83,6 +83,7 @@ impl SchemaExt for Schema {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct SchemaProvider {
     config: PatheryConfig,
 }

@@ -4,79 +4,30 @@ use std::result::Result as StdResult;
 
 use async_trait::async_trait;
 use aws_sdk_dynamodb as ddb;
-use ddb::error::{BatchGetItemError, BatchWriteItemError};
 use ddb::model::{AttributeValue, KeysAndAttributes, PutRequest, WriteRequest};
 use ddb::types::SdkError;
 use serde::{Deserialize, Serialize};
 use tantivy::schema::NamedFieldDocument;
-use thiserror::Error;
 
 use crate::search_doc::{DDBKey, SearchDoc, SearchDocId};
+use crate::service::ServiceError;
 use crate::util;
 
-#[derive(Debug, Error)]
-pub enum DocumentStoreError {
-    #[error("document store returned an incomplete response")]
-    PartialSuccess,
-
-    #[error("request exceeded the rate limit")]
-    RequestRateLimitExceeded,
-
-    #[error("unexpected error: [{reason:?}]")]
-    UnexpectedError { reason: String },
-}
-
-impl<T> From<SdkError<T>> for DocumentStoreError
-where
-    SdkError<T>: Display,
-    T: Into<DocumentStoreError>,
+impl<T> From<SdkError<T>> for ServiceError
+where SdkError<T>: Display
 {
     fn from(sdk_err: SdkError<T>) -> Self {
-        if let SdkError::ServiceError { err, .. } = sdk_err {
-            err.into()
-        } else {
-            DocumentStoreError::UnexpectedError {
-                reason: sdk_err.to_string(),
-            }
-        }
+        ServiceError::InternalError(sdk_err.to_string())
     }
 }
 
-impl From<BatchGetItemError> for DocumentStoreError {
-    fn from(err: BatchGetItemError) -> Self {
-        match err.kind {
-            ddb::error::BatchGetItemErrorKind::RequestLimitExceeded(_) => {
-                DocumentStoreError::RequestRateLimitExceeded
-            }
-            _ => DocumentStoreError::UnexpectedError {
-                reason: err.to_string(),
-            },
-        }
-    }
-}
-
-impl From<BatchWriteItemError> for DocumentStoreError {
-    fn from(err: BatchWriteItemError) -> Self {
-        match err.kind {
-            ddb::error::BatchWriteItemErrorKind::RequestLimitExceeded(_) => {
-                DocumentStoreError::RequestRateLimitExceeded
-            }
-            _ => DocumentStoreError::UnexpectedError {
-                reason: err.to_string(),
-            },
-        }
-    }
-}
-
-impl From<serde_dynamo::Error> for DocumentStoreError {
+impl From<serde_dynamo::Error> for ServiceError {
     fn from(err: serde_dynamo::Error) -> Self {
-        DocumentStoreError::UnexpectedError {
-            reason: err.to_string(),
-        }
+        ServiceError::internal_error(&err.to_string())
     }
 }
 
-type Result<T> = StdResult<T, DocumentStoreError>;
+type Result<T> = StdResult<T, ServiceError>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct SearchDocRef(SearchDocId);
@@ -143,7 +94,7 @@ impl DocumentStore for DDBDocumentStore {
             .collect::<Vec<_>>();
 
         if unprocessed_ids.len() > 0 {
-            return Err(DocumentStoreError::PartialSuccess);
+            return Err(ServiceError::rate_limit());
         }
 
         Ok(documents)
@@ -175,7 +126,7 @@ impl DocumentStore for DDBDocumentStore {
         if let Some(items) = response.unprocessed_items() {
             let unhandled_writes = items.values().flatten().collect::<Vec<_>>();
             if unhandled_writes.len() > 0 {
-                return Err(DocumentStoreError::PartialSuccess);
+                return Err(ServiceError::rate_limit());
             }
         };
 
@@ -205,6 +156,7 @@ pub mod test_util {
 
     use super::*;
 
+    #[derive(Clone, Debug)]
     pub struct TestDocumentStore {
         db: Arc<Mutex<HashMap<SearchDocId, SearchDoc>>>,
     }

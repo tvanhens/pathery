@@ -1,25 +1,9 @@
-use pathery::lambda;
-use pathery::lambda::http::HttpRequest;
-use pathery::schema::SchemaProvider;
-use pathery::service::index::post_index;
-use pathery::store::document::DDBDocumentStore;
-use pathery::worker::index_writer::client::LambdaIndexWriterClient;
+use pathery::service::index::PostIndexService;
+use pathery::service::start_service;
 
 #[tokio::main]
 async fn main() -> Result<(), lambda_http::Error> {
-    lambda::init_tracing();
+    let service = PostIndexService::create().await;
 
-    let document_store = DDBDocumentStore::create(None).await;
-    let writer_client = LambdaIndexWriterClient::create(None).await;
-    let schema_loader = SchemaProvider::lambda();
-
-    lambda_http::run(lambda_http::service_fn(|event: HttpRequest| {
-        post_index(
-            &document_store,
-            &writer_client,
-            &schema_loader,
-            event.into(),
-        )
-    }))
-    .await
+    start_service(&service).await
 }

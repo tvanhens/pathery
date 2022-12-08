@@ -12,12 +12,10 @@ pub(crate) use serde_json as json;
 
 #[cfg(test)]
 pub mod test_utils {
-    use std::sync::Arc;
-
     pub use serde_json as json;
     pub use serde_json::json;
-    use tantivy::Index;
 
+    use crate::index::test_util::TestIndexLoader;
     use crate::schema::{SchemaLoader, SchemaProvider};
     use crate::search_doc::SearchDoc;
     use crate::store::document::test_util::TestDocumentStore;
@@ -27,26 +25,45 @@ pub mod test_utils {
     use crate::worker::index_writer::job::Job;
 
     pub struct TestContext {
-        pub document_store: Arc<TestDocumentStore>,
-        pub index_writer_client: TestIndexWriterClient,
-        pub schema_loader: Box<dyn SchemaLoader>,
-        pub index_loader: Arc<Index>,
+        schema_loader: SchemaProvider,
+
+        document_store: TestDocumentStore,
+
+        writer_client: TestIndexWriterClient,
+
+        index_loader: TestIndexLoader,
     }
 
     impl TestContext {
-        pub async fn with_documents(self, docs: Vec<json::Value>) -> TestContext {
-            let schema = self.schema_loader.load_schema("test");
+        pub async fn with_documents(self, index_id: &str, docs: Vec<json::Value>) -> TestContext {
+            let schema = self.schema_loader.load_schema(index_id);
             let documents: Vec<_> = docs
                 .into_iter()
                 .map(|value| SearchDoc::from_json(&schema, value).unwrap())
                 .collect();
             let doc_refs = self.document_store.save_documents(documents).await.unwrap();
-            let mut job = Job::create("test");
+            let mut job = Job::create(index_id);
             for doc_ref in doc_refs {
                 job.index_doc(doc_ref);
             }
-            self.index_writer_client.submit_job(job).await.unwrap();
+            self.writer_client().submit_job(job).await.unwrap();
             self
+        }
+
+        pub fn schema_loader(&self) -> &SchemaProvider {
+            &self.schema_loader
+        }
+
+        pub fn document_store(&self) -> &TestDocumentStore {
+            &self.document_store
+        }
+
+        pub fn writer_client(&self) -> &TestIndexWriterClient {
+            &self.writer_client
+        }
+
+        pub fn index_loader(&self) -> &TestIndexLoader {
+            &self.index_loader
         }
     }
 
@@ -91,17 +108,20 @@ pub mod test_utils {
             ]
         });
 
-        let schema_provider = SchemaProvider::from_json(config);
+        let schema_loader = SchemaProvider::from_json(config);
 
-        let index = Arc::new(Index::create_in_ram(schema_provider.load_schema("test")));
+        let index_loader = TestIndexLoader::create(schema_loader.clone());
 
-        let document_store = Arc::new(TestDocumentStore::create());
+        let document_store = TestDocumentStore::create();
 
         TestContext {
-            index_writer_client: TestIndexWriterClient::create(&index, &document_store),
+            schema_loader,
+            writer_client: TestIndexWriterClient::create(
+                index_loader.clone(),
+                document_store.clone(),
+            ),
             document_store,
-            index_loader: index,
-            schema_loader: Box::new(schema_provider),
+            index_loader,
         }
     }
 }

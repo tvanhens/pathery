@@ -105,19 +105,15 @@ mod tests {
 
     use super::job::Job;
     use super::{handle_event, *};
+    use crate::schema::SchemaLoader;
     use crate::search_doc::SearchDoc;
     use crate::test_utils::*;
 
     #[tokio::test]
     async fn test_indexing() {
-        let TestContext {
-            document_store,
-            index_loader,
-            schema_loader,
-            ..
-        } = setup();
+        let ctx = setup();
 
-        let schema = schema_loader.load_schema("test");
+        let schema = ctx.schema_loader().load_schema("test");
 
         let mut job = Job::create("test");
 
@@ -129,7 +125,11 @@ mod tests {
         )
         .unwrap();
 
-        let doc_refs = document_store.save_documents(vec![document]).await.unwrap();
+        let doc_refs = ctx
+            .document_store()
+            .save_documents(vec![document])
+            .await
+            .unwrap();
 
         for doc_ref in doc_refs {
             job.index_doc(doc_ref);
@@ -145,13 +145,21 @@ mod tests {
         };
 
         handle_event(
-            document_store.as_ref(),
-            &index_loader,
+            ctx.document_store(),
+            ctx.index_loader(),
             LambdaEvent::new(event, Context::default()),
         )
         .await
         .unwrap();
 
-        assert_eq!(1, index_loader.reader().unwrap().searcher().num_docs());
+        assert_eq!(
+            1,
+            ctx.index_loader()
+                .load_index("test", None)
+                .reader()
+                .unwrap()
+                .searcher()
+                .num_docs()
+        );
     }
 }

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 use tantivy::merge_policy::DefaultMergePolicy;
 use tantivy::schema::Field;
@@ -10,7 +9,7 @@ use crate::directory::PatheryDirectory;
 use crate::schema::{SchemaLoader, SchemaProvider};
 
 pub trait IndexLoader: Send + Sync {
-    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Arc<Index>;
+    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index;
 }
 
 pub struct IndexProvider {
@@ -26,7 +25,7 @@ impl IndexProvider {
 }
 
 impl IndexLoader for IndexProvider {
-    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Arc<Index> {
+    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let mut index =
@@ -43,14 +42,7 @@ impl IndexLoader for IndexProvider {
             .set_default_multithread_executor()
             .expect("default multithread executor should succeed");
 
-        Arc::new(index)
-    }
-}
-
-/// Used for testing purposes. Always returns the same Rc wrapped index.
-impl IndexLoader for Arc<Index> {
-    fn load_index(&self, _index_id: &str, _with_partition: Option<(usize, usize)>) -> Arc<Index> {
-        Arc::clone(self)
+        index
     }
 }
 
@@ -78,5 +70,52 @@ impl IndexExt for Index {
         self.schema()
             .get_field("__id")
             .expect("__id field should exist")
+    }
+}
+
+#[cfg(test)]
+pub mod test_util {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    #[derive(Debug)]
+    pub struct TestIndexLoader {
+        schema_loader: SchemaProvider,
+
+        table: Arc<Mutex<HashMap<String, Index>>>,
+    }
+
+    impl Clone for TestIndexLoader {
+        fn clone(&self) -> Self {
+            Self {
+                schema_loader: self.schema_loader.clone(),
+                table: self.table.clone(),
+            }
+        }
+    }
+
+    impl IndexLoader for TestIndexLoader {
+        fn load_index(&self, index_id: &str, _with_partition: Option<(usize, usize)>) -> Index {
+            let mut table = self.table.lock().unwrap();
+
+            let entry = (*table).entry(index_id.into());
+
+            let schema = self.schema_loader.load_schema(index_id);
+
+            let index = entry.or_insert_with(|| Index::create_in_ram(schema));
+
+            index.clone()
+        }
+    }
+
+    impl TestIndexLoader {
+        pub fn create(schema_loader: SchemaProvider) -> Self {
+            TestIndexLoader {
+                schema_loader,
+                table: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
     }
 }

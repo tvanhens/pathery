@@ -1,87 +1,96 @@
+use async_trait::async_trait;
 use serde::Serialize;
 
-use super::PathParams;
-use crate::lambda::http::{self, err_response, HandlerResponse, HandlerResult, ServiceRequest};
-use crate::schema::SchemaLoader;
-use crate::search_doc::{SearchDoc, SearchDocError};
-use crate::store::document::DocumentStore;
-use crate::worker::index_writer::client::{IndexWriterClient, IndexWriterClientError};
+use crate::schema::{SchemaLoader, SchemaProvider};
+use crate::search_doc::SearchDoc;
+use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
+use crate::store::document::{DDBDocumentStore, DocumentStore};
+use crate::worker::index_writer::client::{IndexWriterClient, LambdaIndexWriterClient};
 use crate::worker::index_writer::job::Job;
 use crate::{json, util};
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct PostIndexResponse {
     pub job_id: String,
     pub updated_at: String,
 }
 
-impl From<SearchDocError> for HandlerResponse {
-    fn from(err: SearchDocError) -> Self {
-        err_response(400, &err.to_string())
+pub struct PostIndexService {
+    schema_loader: Box<dyn SchemaLoader>,
+
+    document_store: Box<dyn DocumentStore>,
+
+    writer_client: Box<dyn IndexWriterClient>,
+}
+
+#[async_trait]
+impl ServiceHandler<json::Value, PostIndexResponse> for PostIndexService {
+    async fn handle_request(
+        &self,
+        request: ServiceRequest<json::Value>,
+    ) -> ServiceResponse<PostIndexResponse> {
+        let body = request.body()?;
+
+        let index_id = request.path_param("index_id")?;
+
+        let schema = self.schema_loader.load_schema(&index_id);
+
+        let document = SearchDoc::from_json(&schema, body)
+            .map_err(|err| ServiceError::invalid_request(&err.to_string()))?;
+
+        let doc_refs = self.document_store.save_documents(vec![document]).await?;
+
+        let mut job = Job::create(&index_id);
+
+        for doc_ref in doc_refs {
+            job.index_doc(doc_ref);
+        }
+
+        let job_id = self.writer_client.submit_job(job).await?;
+
+        Ok(PostIndexResponse {
+            job_id,
+            updated_at: util::timestamp(),
+        })
     }
 }
 
-impl From<IndexWriterClientError> for HandlerResponse {
-    fn from(_: IndexWriterClientError) -> Self {
-        todo!()
+impl PostIndexService {
+    pub async fn create() -> Self {
+        let document_store = DDBDocumentStore::create(None).await;
+        let writer_client = LambdaIndexWriterClient::create(None).await;
+        let schema_loader = SchemaProvider::lambda();
+
+        PostIndexService {
+            document_store: Box::new(document_store),
+            writer_client: Box::new(writer_client),
+            schema_loader: Box::new(schema_loader),
+        }
     }
-}
-
-// Indexes a document supplied via a JSON object in the body.
-#[tracing::instrument(skip(writer_client, schema_loader, document_store))]
-pub async fn post_index(
-    document_store: &dyn DocumentStore,
-    writer_client: &dyn IndexWriterClient,
-    schema_loader: &dyn SchemaLoader,
-    request: ServiceRequest<json::Value, PathParams>,
-) -> HandlerResult {
-    let (body, path_params) = match request.into_parts() {
-        Ok(parts) => parts,
-        Err(response) => return Ok(response),
-    };
-
-    let schema = schema_loader.load_schema(&path_params.index_id);
-
-    let document = match SearchDoc::from_json(&schema, body) {
-        Ok(doc) => doc,
-        Err(err) => return Ok(err.into()),
-    };
-
-    let doc_refs = match document_store.save_documents(vec![document]).await {
-        Ok(refs) => refs,
-        Err(err) => return Ok(err.into()),
-    };
-
-    let mut job = Job::create(&path_params.index_id);
-
-    for doc_ref in doc_refs {
-        job.index_doc(doc_ref);
-    }
-
-    let job_id = match writer_client.submit_job(job).await {
-        Ok(job_id) => job_id,
-        Err(err) => return Ok(err.into()),
-    };
-
-    http::success(&PostIndexResponse {
-        job_id,
-        updated_at: util::timestamp(),
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::test_utils::*;
+    use crate::test_utils::*;
+
+    pub fn test_service() -> PostIndexService {
+        let ctx = setup();
+
+        let schema_loader = Box::new(ctx.schema_loader().clone());
+        let document_store = Box::new(ctx.document_store().clone());
+        let writer_client = Box::new(ctx.writer_client().clone());
+
+        PostIndexService {
+            schema_loader,
+            document_store,
+            writer_client,
+        }
+    }
 
     #[tokio::test]
     async fn post_index_doc_with_no_id() {
-        let TestContext {
-            document_store,
-            index_writer_client,
-            schema_loader,
-            ..
-        } = setup();
+        let service = test_service();
 
         let doc = json::json!({
             "title": "Zen and the Art of Motorcycle Maintenance",
@@ -90,136 +99,63 @@ mod tests {
             "isbn": "0060589469"
         });
 
-        let request = request(
-            doc,
-            PathParams {
-                index_id: "test".into(),
-            },
-        );
+        let request = ServiceRequest::create(doc).with_path_param("index_id", "test");
 
-        let response = post_index(
-            document_store.as_ref(),
-            &index_writer_client,
-            schema_loader.as_ref(),
-            request,
-        )
-        .await
-        .unwrap();
-
-        let (code, _body) = parse_response::<json::Value>(response);
-
-        assert_eq!(200, code);
+        service.handle_request(request).await.unwrap();
     }
 
     #[tokio::test]
     async fn post_index_non_object() {
-        let TestContext {
-            document_store,
-            index_writer_client,
-            schema_loader,
-            ..
-        } = setup();
+        let service = test_service();
 
         let doc = json::json!([]);
 
-        let request = request(
-            doc,
-            PathParams {
-                index_id: "test".into(),
-            },
-        );
+        let request = ServiceRequest::create(doc).with_path_param("index_id", "test");
 
-        let response = post_index(
-            document_store.as_ref(),
-            &index_writer_client,
-            schema_loader.as_ref(),
-            request,
-        )
-        .await
-        .unwrap();
+        let response = service.handle_request(request).await.unwrap_err();
 
-        let (code, body) = parse_response::<json::Value>(response);
-
-        assert_eq!(400, code);
         assert_eq!(
-            json::json!({"message": "json value is not an object"}),
-            body
+            ServiceError::invalid_request("json value is not an object"),
+            response
         );
     }
 
     #[tokio::test]
     async fn post_index_value_that_does_not_match_schema() {
-        let TestContext {
-            document_store,
-            index_writer_client,
-            schema_loader,
-            ..
-        } = setup();
+        let service = test_service();
 
         let doc = json::json!({"title": 1});
 
-        let request = request(
-            doc,
-            PathParams {
-                index_id: "test".into(),
-            },
-        );
+        let request = ServiceRequest::create(doc).with_path_param("index_id", "test");
 
-        let response = post_index(
-            document_store.as_ref(),
-            &index_writer_client,
-            schema_loader.as_ref(),
-            request,
-        )
-        .await
-        .unwrap();
+        let response = service.handle_request(request).await.unwrap_err();
 
-        let (code, body) = parse_response::<json::Value>(response);
-
-        assert_eq!(400, code);
         assert_eq!(
-            json::json!({"message": "The field '\"title\"' could not be parsed: TypeError { expected: \"a string\", json: Number(1) }"}),
-            body,
+            ServiceError::invalid_request(
+                "The field '\"title\"' could not be parsed: TypeError { expected: \"a string\", \
+                 json: Number(1) }"
+            ),
+            response
         );
     }
 
     #[tokio::test]
     async fn post_index_field_that_does_not_exist() {
-        let TestContext {
-            document_store,
-            index_writer_client,
-            schema_loader,
-            ..
-        } = setup();
+        let service = test_service();
 
         let doc = json::json!({
             "foobar": "baz",
         });
 
-        let request = request(
-            doc,
-            PathParams {
-                index_id: "test".into(),
-            },
-        );
+        let request = ServiceRequest::create(doc).with_path_param("index_id", "test");
 
-        let response = post_index(
-            document_store.as_ref(),
-            &index_writer_client,
-            schema_loader.as_ref(),
-            request,
-        )
-        .await
-        .unwrap();
+        let response = service.handle_request(request).await.unwrap_err();
 
-        let (code, body) = parse_response::<json::Value>(response);
-
-        assert_eq!(400, code);
         // Empty because the non-existent field does not explicitly trigger a failure - it just
         // doesn't get indexed.
         assert_eq!(
-            json::json!({"message": "cannot index empty document"}),
-            body,
+            ServiceError::invalid_request("cannot index empty document"),
+            response,
         );
     }
 }
