@@ -1,35 +1,95 @@
-use std::env;
+use async_trait::async_trait;
+use thiserror::Error;
 
-use super::op::OpBatch;
-use crate::aws::{s3_bucket_client, sqs_queue_client, S3Bucket, S3Ref, SQSQueue};
+use super::job::Job;
+use crate::service::ServiceError;
 use crate::util;
 
-pub struct IndexWriterClient {
-    pub(crate) bucket_client: Box<dyn S3Bucket<OpBatch>>,
-    pub(crate) queue_client: Box<dyn SQSQueue<S3Ref>>,
+#[derive(Debug, Error)]
+pub enum IndexWriterClientError {}
+
+#[async_trait]
+pub trait IndexWriterClient: Sync + Send {
+    async fn submit_job(&self, job: Job) -> Result<String, ServiceError>;
 }
 
-impl IndexWriterClient {
-    pub async fn default() -> IndexWriterClient {
-        let queue_url = env::var("INDEX_WRITER_QUEUE_URL").expect("should be set");
+pub struct LambdaIndexWriterClient {
+    queue_url: String,
+    client: aws_sdk_sqs::Client,
+}
 
-        IndexWriterClient {
-            bucket_client: Box::new(s3_bucket_client().await),
-            queue_client: Box::new(sqs_queue_client(&queue_url).await),
+#[async_trait]
+impl IndexWriterClient for LambdaIndexWriterClient {
+    async fn submit_job(&self, job: Job) -> Result<String, ServiceError> {
+        let body = serde_json::to_string(&job).expect("job should serialize");
+
+        let response = self
+            .client
+            .send_message()
+            .queue_url(&self.queue_url)
+            .message_body(body)
+            .message_group_id(job.index_id)
+            .send()
+            .await
+            .expect("job should queue");
+
+        Ok(response
+            .message_id()
+            .expect("message id should exist")
+            .to_string())
+    }
+}
+
+impl LambdaIndexWriterClient {
+    pub async fn create(queue_url: Option<&str>) -> LambdaIndexWriterClient {
+        let sdk_config = aws_config::load_from_env().await;
+
+        LambdaIndexWriterClient {
+            queue_url: queue_url
+                .map(String::from)
+                .unwrap_or_else(|| util::require_env("INDEX_WRITER_QUEUE_URL")),
+            client: aws_sdk_sqs::Client::new(&sdk_config),
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod test_utils {
+    use super::*;
+    use crate::index::test_util::TestIndexLoader;
+    use crate::index::{IndexExt, IndexLoader};
+    use crate::store::document::test_util::TestDocumentStore;
+    use crate::util;
+    use crate::worker::index_writer::handle_job;
+
+    #[derive(Clone)]
+    pub struct TestIndexWriterClient {
+        index_loader: TestIndexLoader,
+
+        document_store: TestDocumentStore,
+    }
+
+    #[async_trait]
+    impl IndexWriterClient for TestIndexWriterClient {
+        async fn submit_job(&self, job: Job) -> Result<String, ServiceError> {
+            let index = self.index_loader.load_index(&job.index_id, None)?;
+
+            let mut writer = index.default_writer();
+
+            handle_job(&mut writer, &self.document_store, job).await;
+
+            writer.commit().unwrap();
+
+            Ok(util::generate_id())
         }
     }
 
-    pub async fn write_batch(&self, batch: OpBatch) {
-        let key = format!("writer_batches/{}", util::generate_id());
-
-        let s3_ref = self
-            .bucket_client
-            .write_object(&key, &batch)
-            .await
-            .expect("object should write");
-
-        self.queue_client
-            .send_message(&batch.index_id, &s3_ref)
-            .await;
+    impl TestIndexWriterClient {
+        pub fn create(index_loader: TestIndexLoader, document_store: TestDocumentStore) -> Self {
+            TestIndexWriterClient {
+                index_loader,
+                document_store,
+            }
+        }
     }
 }

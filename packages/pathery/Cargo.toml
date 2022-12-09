@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.66"
 async-trait = "0.1.58"
 aws-config = "0.51.0"
+aws-sdk-dynamodb = "0.21.0"
 aws-sdk-s3 = "0.21.0"
 aws-sdk-sqs = "0.21.0"
 aws_lambda_events = "0.7.2"
@@ -14,6 +16,7 @@ http = "0.2.8"
 lambda_http = { version = "0.7", default-features = false, features = ["apigw_rest"] }
 lambda_runtime = "0.7"
 serde = { version = "1.0.147", features = ["derive"] }
+serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+0_21"] }
 serde_json = "1.0.87"
 tantivy = { version = "0.18.1" }
 tantivy-common = "0.3.0"

@@ -3,27 +3,24 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
-use tantivy::Document;
 use thiserror::Error;
 
-use crate::util;
+use crate::service::ServiceError;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TextFieldOption {
-    STORED,
     TEXT,
     STRING,
     FAST,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum NumericFieldOption {
-    STORED,
     INDEXED,
     FAST,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "kind")]
 pub enum FieldConfig {
     #[serde(rename = "text")]
@@ -43,19 +40,19 @@ pub enum FieldConfig {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IndexConfig {
     prefix: String,
     fields: Vec<FieldConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PatheryConfig {
     indexes: Vec<IndexConfig>,
 }
 
 pub trait SchemaLoader: Send + Sync {
-    fn load_schema(&self, index_id: &str) -> Schema;
+    fn load_schema(&self, index_id: &str) -> Result<Schema, ServiceError>;
 }
 
 #[derive(Error, Debug)]
@@ -72,7 +69,6 @@ fn numeric_field_options(flags: &Vec<NumericFieldOption>) -> NumericOptions {
     flags
         .iter()
         .fold(NumericOptions::default(), |acc, opt| match opt {
-            NumericFieldOption::STORED => acc | schema::STORED,
             NumericFieldOption::INDEXED => acc | schema::INDEXED,
             NumericFieldOption::FAST => acc | schema::FAST,
         })
@@ -80,8 +76,6 @@ fn numeric_field_options(flags: &Vec<NumericFieldOption>) -> NumericOptions {
 
 pub trait SchemaExt {
     fn id_field(&self) -> Field;
-
-    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError>;
 }
 
 impl SchemaExt for Schema {
@@ -89,39 +83,9 @@ impl SchemaExt for Schema {
         self.get_field("__id")
             .expect("__id field should be present")
     }
-
-    fn to_document(&self, json_doc: json::Value) -> Result<(String, Document), IndexDocError> {
-        let json_doc = if let json::Value::Object(obj) = json_doc {
-            obj
-        } else {
-            return Err(IndexDocError::NotJsonObject);
-        };
-
-        let doc_id = json_doc
-            .get("__id")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        let mut document = self
-            .json_object_to_doc(json_doc)
-            .map_err(IndexDocError::DocParsingError)?;
-
-        if document.is_empty() {
-            return Err(IndexDocError::EmptyDoc);
-        }
-
-        match doc_id {
-            Some(doc_id) => Ok((doc_id, document)),
-            None => {
-                let id_field = self.id_field();
-                let doc_id = util::generate_id();
-                document.add_text(id_field, &doc_id);
-                Ok((doc_id, document))
-            }
-        }
-    }
 }
 
+#[derive(Clone, Debug)]
 pub struct SchemaProvider {
     config: PatheryConfig,
 }
@@ -142,13 +106,15 @@ impl SchemaProvider {
 }
 
 impl SchemaLoader for SchemaProvider {
-    fn load_schema(&self, index_id: &str) -> Schema {
+    fn load_schema(&self, index_id: &str) -> Result<Schema, ServiceError> {
         let config = self
             .config
             .indexes
             .iter()
             .find(|config| index_id.starts_with(&config.prefix))
-            .expect("schema definition should exist");
+            .ok_or_else(|| {
+                ServiceError::not_found(&format!("Schema for index [{}] not found", index_id))
+            })?;
 
         let mut schema = Schema::builder();
 
@@ -160,7 +126,6 @@ impl SchemaLoader for SchemaProvider {
                             .iter()
                             .fold(TextOptions::default(), |acc, opt| match opt {
                                 TextFieldOption::TEXT => acc | schema::TEXT,
-                                TextFieldOption::STORED => acc | schema::STORED,
                                 TextFieldOption::STRING => acc | schema::STRING,
                                 TextFieldOption::FAST => acc | schema::FAST,
                             });
@@ -180,7 +145,7 @@ impl SchemaLoader for SchemaProvider {
         // __id is the document id used for uniqueness
         schema.add_text_field("__id", schema::STRING | schema::STORED);
 
-        schema.build()
+        Ok(schema.build())
     }
 }
 
@@ -198,22 +163,22 @@ mod tests {
                     "fields": [
                         {
                             "name": "title",
-                            "flags": ["STORED", "TEXT"],
+                            "flags": ["TEXT"],
                             "kind": "text",
                         },
                         {
                             "name": "author",
-                            "flags": ["STORED", "STRING"],
+                            "flags": ["STRING"],
                             "kind": "text",
                         },
                         {
                             "name": "date_added",
-                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "flags": ["INDEXED", "FAST"],
                             "kind": "date",
                         },
                         {
                             "name": "year",
-                            "flags": ["STORED", "INDEXED", "FAST"],
+                            "flags": ["INDEXED", "FAST"],
                             "kind": "i64",
                         },
                     ],

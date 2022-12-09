@@ -2,4 +2,4 @@
 "@pathery/cdk": patch
 ---
 
-Add date field type.
+Feature: Add date field type.

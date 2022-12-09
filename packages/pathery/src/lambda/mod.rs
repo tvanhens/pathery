@@ -1,7 +1,4 @@
-pub mod http;
 pub mod sqs;
-
-use std::panic;
 
 pub use lambda_runtime::Error;
 pub use {lambda_runtime, tracing};
@@ -13,7 +10,4 @@ pub fn init_tracing() {
         .with_target(false)
         .without_time()
         .init();
-    panic::set_hook(Box::new(|panic| {
-        tracing::error!(message = panic.to_string());
-    }));
 }

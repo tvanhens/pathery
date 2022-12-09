@@ -1,140 +1,206 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::marker::PhantomData;
+
+use async_trait::async_trait;
+use http::Response;
+use lambda_http::{Body, RequestExt};
+use serde::{Deserialize, Serialize};
+use tracing::error;
+
+use crate::util;
+
 pub mod doc;
 pub mod index;
 
-#[cfg(test)]
-mod test_utils {
-    use std::collections::HashMap;
-    use std::marker::PhantomData;
-    use std::sync::Arc;
-    use std::vec;
+#[derive(thiserror::Error, Debug)]
+pub enum ServiceError {
+    #[error("{0}")]
+    InvalidRequest(String),
 
-    use ::http::{Request, StatusCode};
-    use async_trait::async_trait;
-    use aws_lambda_events::query_map::QueryMap;
-    use lambda_http::{Body, RequestExt};
-    use serde::{Deserialize, Serialize};
-    pub use tantivy::doc;
-    use tantivy::Index;
+    #[error("Internal service error")]
+    InternalError { id: String, source: anyhow::Error },
 
-    use crate::aws::{S3Bucket, S3Ref, SQSQueue};
-    pub(crate) use crate::json;
-    use crate::lambda::http::{HandlerResponse, HttpRequest, ServiceRequest};
-    use crate::schema::{SchemaLoader, SchemaProvider};
-    use crate::worker::index_writer::client::IndexWriterClient;
+    #[error("Rate limit hit, back off and try request again.")]
+    RateLimit,
 
-    fn test_index_writer_client() -> IndexWriterClient {
-        struct TestBucketClient<O> {
-            object_type: PhantomData<O>,
-        }
+    #[error("{0}")]
+    NotFound(String),
+}
 
-        #[async_trait]
-        impl<O: Send + Sync> S3Bucket<O> for TestBucketClient<O> {
-            async fn write_object(&self, key: &str, _obj: &O) -> Option<S3Ref> {
-                Some(S3Ref {
-                    bucket: "test".into(),
-                    key: key.into(),
-                })
-            }
+impl ServiceError {
+    pub fn invalid_request(message: &str) -> Self {
+        ServiceError::InvalidRequest(message.into())
+    }
 
-            async fn read_object(&self, _s3_ref: &S3Ref) -> Option<O> {
-                todo!()
-            }
-
-            async fn delete_object(&self, _s3_ref: &S3Ref) {
-                todo!()
-            }
-        }
-
-        struct TestQueueClient<O> {
-            object_type: PhantomData<O>,
-        }
-
-        #[async_trait]
-        impl<O: Send + Sync> SQSQueue<O> for TestQueueClient<O> {
-            async fn send_message(&self, _group_id: &str, _message: &O) {}
-        }
-
-        IndexWriterClient {
-            bucket_client: Box::new(TestBucketClient {
-                object_type: PhantomData,
-            }),
-            queue_client: Box::new(TestQueueClient {
-                object_type: PhantomData,
-            }),
+    pub fn internal_error<E>(source: E) -> Self
+    where E: Error + Send + Sync + 'static {
+        let id = util::generate_id();
+        error!(
+            message = "InternalServiceError",
+            id,
+            error = format!("{source:#?}")
+        );
+        ServiceError::InternalError {
+            id,
+            source: anyhow::Error::new(source),
         }
     }
 
-    pub fn setup() -> (IndexWriterClient, SchemaProvider, Arc<Index>) {
-        let config = json::json!({
-            "indexes": [
-                {
-                    "prefix": "test",
-                    "fields": [
-                        {
-                            "name": "title",
-                            "kind": "text",
-                            "flags": ["TEXT", "STORED"]
-                        },
-                        {
-                            "name": "author",
-                            "kind": "text",
-                            "flags": ["TEXT", "STORED"]
-                        },
-                        {
-                            "name": "isbn",
-                            "kind": "text",
-                            "flags": ["STRING"]
-                        },
-                        {
-                            "name": "date_added",
-                            "kind": "date",
-                            "flags": ["INDEXED", "STORED", "FAST"]
-                        },
-                        {
-                            "name": "meta",
-                            "kind": "text",
-                            "flags": ["STORED"]
-                        }
-                    ]
-                }
-            ]
-        });
-
-        let schema_provider = SchemaProvider::from_json(config);
-
-        let index = Index::create_in_ram(schema_provider.load_schema("test"));
-
-        (test_index_writer_client(), schema_provider, Arc::new(index))
+    pub fn not_found(message: &str) -> Self {
+        ServiceError::NotFound(message.into())
     }
 
-    pub fn request<B, P>(body: B, params: P) -> ServiceRequest<B, P>
-    where
-        B: Serialize,
-        P: Serialize,
-    {
-        let request: HttpRequest = Request::builder()
-            .header("Content-Type", "application/json")
-            .body(json::to_string(&body).expect("should serialize").into())
-            .expect("should build request");
-
-        let params_value = json::to_value(params).expect("params should serialize to value");
-
-        let params_map: HashMap<String, String> =
-            json::from_value(params_value).expect("params value should deserialize");
-
-        request
-            .with_path_parameters::<QueryMap>(params_map.into())
-            .into()
+    pub fn rate_limit() -> Self {
+        ServiceError::RateLimit
     }
 
-    pub fn parse_response<V>(response: HandlerResponse) -> (StatusCode, V)
-    where V: for<'de> Deserialize<'de> {
-        let code = response.status();
-        let body: V = if let Body::Text(x) = response.body() {
-            json::from_str(x).unwrap()
+    pub fn status(&self) -> u16 {
+        use ServiceError::*;
+        match self {
+            InvalidRequest(_) => 400,
+            InternalError { .. } => 500,
+            RateLimit => 429,
+            NotFound(_) => 404,
+        }
+    }
+
+    pub fn message(self) -> String {
+        use ServiceError::*;
+        match self {
+            InternalError { id, .. } => format!("Internal server error [id = {}]", id),
+            InvalidRequest(message) => message,
+            RateLimit => String::from("Too many requests"),
+            NotFound(message) => message,
+        }
+    }
+}
+
+type ServiceResponse<R> = Result<R, ServiceError>;
+
+pub struct ServiceRequest<B> {
+    inner: lambda_http::Request,
+    body: PhantomData<B>,
+}
+
+impl<B> ServiceRequest<B>
+where B: for<'de> Deserialize<'de>
+{
+    /// Useful for testing
+    pub fn create(body: B) -> ServiceRequest<B>
+    where B: Serialize {
+        let request = http::Request::builder();
+
+        let body = lambda_http::Body::from(serde_json::to_string(&body).unwrap());
+
+        let inner = request.body(body).unwrap();
+
+        ServiceRequest {
+            inner,
+            body: PhantomData,
+        }
+    }
+
+    /// Useful for testing
+    pub fn with_path_param(mut self, name: &str, value: &str) -> Self {
+        let updated = self
+            .inner
+            .with_path_parameters(HashMap::from([(String::from(name), String::from(value))]));
+
+        self.inner = updated;
+
+        self
+    }
+
+    pub fn body(&self) -> Result<B, ServiceError> {
+        if let Body::Text(body) = self.inner.body() {
+            Ok(serde_json::from_str(body).map_err(|err| {
+                ServiceError::InvalidRequest(format!("Unable to parse body: {}", err.to_string()))
+            })?)
         } else {
-            panic!("Invalid body")
-        };
-        (code, body)
+            Err(ServiceError::InvalidRequest(String::from(
+                "Expected string for body",
+            )))
+        }
     }
+
+    pub fn path_param(&self, name: &str) -> Result<String, ServiceError> {
+        let path_params = self.inner.path_parameters();
+        let value = path_params
+            .first(name)
+            .expect(&format!("missing path param: {}", name));
+
+        Ok(String::from(value))
+    }
+}
+
+fn map_error_response(
+    error: ServiceError,
+) -> Result<lambda_http::Response<lambda_http::Body>, lambda_http::Error> {
+    let status = error.status();
+    let message = error.message();
+
+    let response = Response::builder()
+        .header("Content-Type", "application/json")
+        .status(status);
+
+    let body = serde_json::to_string(&serde_json::json!({ "message": message }))?;
+
+    Ok(response.body(Body::Text(body))?)
+}
+
+fn map_success_response<R>(
+    response: R,
+) -> Result<lambda_http::Response<lambda_http::Body>, lambda_http::Error>
+where R: Serialize {
+    let body = serde_json::to_string(&response)?;
+    Ok(http::Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(lambda_http::Body::Text(body))?)
+}
+
+#[async_trait]
+pub trait ServiceHandler<B, R>: Sync
+where
+    B: for<'de> Deserialize<'de> + Send,
+    R: Serialize,
+{
+    async fn handle_event(
+        &self,
+        event: lambda_http::Request,
+    ) -> Result<lambda_http::Response<lambda_http::Body>, lambda_http::Error> {
+        let request = ServiceRequest {
+            inner: event,
+            body: PhantomData,
+        };
+
+        self.handle_request(request)
+            .await
+            .map_or_else(map_error_response, map_success_response)
+    }
+
+    async fn handle_request(&self, request: ServiceRequest<B>) -> ServiceResponse<R>;
+}
+
+pub async fn start_service<B, R>(
+    service: &dyn ServiceHandler<B, R>,
+) -> Result<(), lambda_http::Error>
+where
+    B: for<'de> Deserialize<'de> + Send,
+    R: Serialize,
+{
+    tracing_subscriber::fmt()
+        .json()
+        .with_max_level(tracing::Level::INFO)
+        .with_target(false)
+        .without_time()
+        .init();
+
+    lambda_http::run(lambda_http::service_fn(|event| async {
+        service.handle_event(event).await
+    }))
+    .await?;
+
+    Ok(())
 }

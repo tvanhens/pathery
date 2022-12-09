@@ -1,46 +1,87 @@
+use async_trait::async_trait;
 use serde::Serialize;
 
-use super::PathParams;
-use crate::lambda::http::{self, HandlerResult, ServiceRequest};
-use crate::schema::{SchemaExt, SchemaLoader};
-use crate::worker::index_writer;
-use crate::worker::index_writer::client::IndexWriterClient;
-use crate::{json, util};
+use crate::json;
+use crate::schema::{SchemaLoader, SchemaProvider};
+use crate::search_doc::SearchDoc;
+use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
+use crate::store::document::{DDBDocumentStore, DocumentStore};
+use crate::worker::index_writer::client::{IndexWriterClient, LambdaIndexWriterClient};
+use crate::worker::index_writer::job::Job;
 
 #[derive(Serialize)]
 pub struct BatchIndexResponse {
-    #[serde(rename = "__id")]
-    pub updated_at: String,
+    pub job_id: String,
 }
 
-// Indexes a batch of documents
-#[tracing::instrument(skip(writer_client, schema_loader))]
-pub async fn batch_index(
-    writer_client: &IndexWriterClient,
-    schema_loader: &dyn SchemaLoader,
-    request: ServiceRequest<Vec<json::Value>, PathParams>,
-) -> HandlerResult {
-    let (body, path_params) = match request.into_parts() {
-        Ok(parts) => parts,
-        Err(response) => return Ok(response),
-    };
+pub struct BatchIndexService {
+    schema_loader: Box<dyn SchemaLoader>,
 
-    let schema = schema_loader.load_schema(&path_params.index_id);
+    document_store: Box<dyn DocumentStore>,
 
-    let mut batch = index_writer::batch(&path_params.index_id);
+    index_writer: Box<dyn IndexWriterClient>,
+}
 
-    for doc_obj in body.into_iter() {
-        let (_id, document) = match schema.to_document(doc_obj) {
-            Ok(doc) => doc,
-            Err(err) => return err.into(),
-        };
+#[async_trait]
+impl ServiceHandler<Vec<json::Value>, BatchIndexResponse> for BatchIndexService {
+    async fn handle_request(
+        &self,
+        request: ServiceRequest<Vec<json::Value>>,
+    ) -> ServiceResponse<BatchIndexResponse> {
+        let body = request.body()?;
 
-        batch.index_doc(&schema, document);
+        let index_id = request.path_param("index_id")?;
+
+        let schema = self.schema_loader.load_schema(&index_id)?;
+
+        let mut job = Job::create(&index_id);
+
+        let documents = body
+            .into_iter()
+            .map(|value| SearchDoc::from_json(&schema, value))
+            .collect::<Vec<_>>();
+
+        let error = documents
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, result)| result.as_ref().err().map(|err| (idx, err)))
+            .collect::<Vec<_>>();
+
+        if let Some((idx, error)) = error.first() {
+            return Err(ServiceError::invalid_request(&format!(
+                "Error parsing document (path: [{}]): {}",
+                idx,
+                error.to_string()
+            )));
+        }
+
+        let documents = documents
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+
+        let doc_refs = self.document_store.save_documents(documents).await?;
+
+        for doc_ref in doc_refs {
+            job.index_doc(doc_ref)
+        }
+
+        let job_id = self.index_writer.submit_job(job).await?;
+
+        Ok(BatchIndexResponse { job_id })
     }
+}
 
-    writer_client.write_batch(batch).await;
+impl BatchIndexService {
+    pub async fn create() -> Self {
+        let document_store = DDBDocumentStore::create(None).await;
+        let writer_client = LambdaIndexWriterClient::create(None).await;
+        let schema_loader = SchemaProvider::lambda();
 
-    http::success(&BatchIndexResponse {
-        updated_at: util::timestamp(),
-    })
+        BatchIndexService {
+            document_store: Box::new(document_store),
+            index_writer: Box::new(writer_client),
+            schema_loader: Box::new(schema_loader),
+        }
+    }
 }
