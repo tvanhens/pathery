@@ -101,6 +101,12 @@ impl DocumentStore for DDBDocumentStore {
     }
 
     async fn save_documents(&self, documents: Vec<SearchDoc>) -> Result<Vec<SearchDocRef>> {
+        if documents.len() > 25 {
+            return Err(ServiceError::invalid_request(
+                "Too many documents in request, max 25.",
+            ));
+        }
+
         let mut writes = vec![];
 
         for document in &documents {
