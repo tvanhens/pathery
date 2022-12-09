@@ -12,19 +12,19 @@ pub trait IndexLoader: Send + Sync {
     fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index;
 }
 
-pub struct IndexProvider {
+pub struct LambdaIndexLoader {
     schema_loader: SchemaProvider,
 }
 
-impl IndexProvider {
-    pub fn lambda() -> Self {
+impl LambdaIndexLoader {
+    pub fn create() -> Self {
         Self {
             schema_loader: SchemaProvider::lambda(),
         }
     }
 }
 
-impl IndexLoader for IndexProvider {
+impl IndexLoader for LambdaIndexLoader {
     fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 

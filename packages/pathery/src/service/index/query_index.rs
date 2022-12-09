@@ -8,7 +8,7 @@ use tantivy::schema::{Field, FieldType};
 use tantivy::{DocAddress, Score, SnippetGenerator, TantivyError};
 use tracing::info;
 
-use crate::index::{IndexLoader, IndexProvider};
+use crate::index::{IndexLoader, LambdaIndexLoader};
 use crate::json;
 use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
 use crate::store::document::{DDBDocumentStore, DocumentStore, SearchDocRef};
@@ -172,7 +172,7 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
 impl QueryIndexService {
     pub async fn create() -> QueryIndexService {
         let document_store = DDBDocumentStore::create(None).await;
-        let index_loader = IndexProvider::lambda();
+        let index_loader = LambdaIndexLoader::create();
 
         QueryIndexService {
             document_store: Box::new(document_store),

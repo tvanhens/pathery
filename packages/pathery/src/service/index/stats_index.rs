@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 
-use crate::index::{IndexLoader, IndexProvider};
+use crate::index::{IndexLoader, LambdaIndexLoader};
 use crate::service::{ServiceHandler, ServiceRequest, ServiceResponse};
 
 #[derive(Serialize, Deserialize)]
@@ -78,7 +78,7 @@ impl ServiceHandler<json::Value, IndexStatsResponse> for StatsIndexService {
 
 impl StatsIndexService {
     pub async fn create() -> Self {
-        let index_loader = IndexProvider::lambda();
+        let index_loader = LambdaIndexLoader::create();
 
         StatsIndexService {
             index_loader: Box::new(index_loader),

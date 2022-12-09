@@ -1,4 +1,4 @@
-use pathery::index::IndexProvider;
+use pathery::index::LambdaIndexLoader;
 use pathery::lambda;
 use pathery::lambda::lambda_runtime::{run, service_fn};
 use pathery::lambda::sqs;
@@ -10,7 +10,7 @@ async fn main() -> Result<(), sqs::Error> {
     lambda::init_tracing();
 
     let document_store = DDBDocumentStore::create(None).await;
-    let index_loader = IndexProvider::lambda();
+    let index_loader = LambdaIndexLoader::create();
 
     run(service_fn(|event| {
         handle_event(&document_store, &index_loader, event)
