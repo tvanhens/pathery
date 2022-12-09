@@ -23,6 +23,9 @@ pub enum ServiceError {
 
     #[error("Rate limit hit, back off and try request again.")]
     RateLimit,
+
+    #[error("{0}")]
+    NotFound(String),
 }
 
 impl ServiceError {
@@ -44,6 +47,10 @@ impl ServiceError {
         }
     }
 
+    pub fn not_found(message: &str) -> Self {
+        ServiceError::NotFound(message.into())
+    }
+
     pub fn rate_limit() -> Self {
         ServiceError::RateLimit
     }
@@ -54,6 +61,7 @@ impl ServiceError {
             InvalidRequest(_) => 400,
             InternalError { .. } => 500,
             RateLimit => 429,
+            NotFound(_) => 404,
         }
     }
 
@@ -63,6 +71,7 @@ impl ServiceError {
             InternalError { id, .. } => format!("Internal server error [id = {}]", id),
             InvalidRequest(message) => message,
             RateLimit => String::from("Too many requests"),
+            NotFound(message) => message,
         }
     }
 }

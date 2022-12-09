@@ -5,6 +5,8 @@ use serde_json as json;
 use tantivy::schema::{self, DocParsingError, Field, NumericOptions, Schema, TextOptions};
 use thiserror::Error;
 
+use crate::service::ServiceError;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TextFieldOption {
     TEXT,
@@ -50,7 +52,7 @@ pub struct PatheryConfig {
 }
 
 pub trait SchemaLoader: Send + Sync {
-    fn load_schema(&self, index_id: &str) -> Schema;
+    fn load_schema(&self, index_id: &str) -> Result<Schema, ServiceError>;
 }
 
 #[derive(Error, Debug)]
@@ -104,13 +106,15 @@ impl SchemaProvider {
 }
 
 impl SchemaLoader for SchemaProvider {
-    fn load_schema(&self, index_id: &str) -> Schema {
+    fn load_schema(&self, index_id: &str) -> Result<Schema, ServiceError> {
         let config = self
             .config
             .indexes
             .iter()
             .find(|config| index_id.starts_with(&config.prefix))
-            .expect("schema definition should exist");
+            .ok_or_else(|| {
+                ServiceError::not_found(&format!("Schema for index [{}] not found", index_id))
+            })?;
 
         let mut schema = Schema::builder();
 
@@ -141,7 +145,7 @@ impl SchemaLoader for SchemaProvider {
         // __id is the document id used for uniqueness
         schema.add_text_field("__id", schema::STRING | schema::STORED);
 
-        schema.build()
+        Ok(schema.build())
     }
 }
 

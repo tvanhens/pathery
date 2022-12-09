@@ -59,7 +59,7 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
             &index_id,
             body.with_partition
                 .map(|x| (x.partition_n, x.total_partitions)),
-        );
+        )?;
 
         let reader = index.reader().expect("Reader should load");
 

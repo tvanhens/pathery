@@ -32,7 +32,7 @@ impl ServiceHandler<Vec<json::Value>, BatchIndexResponse> for BatchIndexService 
 
         let index_id = request.path_param("index_id")?;
 
-        let schema = self.schema_loader.load_schema(&index_id);
+        let schema = self.schema_loader.load_schema(&index_id)?;
 
         let mut job = Job::create(&index_id);
 

@@ -78,9 +78,12 @@ pub async fn handle_event(
 
     for job in jobs {
         let index_id = &job.index_id;
-        let mut writer = writers
-            .entry(index_id.to_string())
-            .or_insert_with(|| index_loader.load_index(&index_id, None).default_writer());
+        let mut writer = writers.entry(index_id.to_string()).or_insert_with(|| {
+            index_loader
+                .load_index(&index_id, None)
+                .unwrap()
+                .default_writer()
+        });
 
         handle_job(&mut writer, document_store, job).await;
     }
@@ -113,7 +116,7 @@ mod tests {
     async fn test_indexing() {
         let ctx = setup();
 
-        let schema = ctx.schema_loader().load_schema("test");
+        let schema = ctx.schema_loader().load_schema("test").unwrap();
 
         let mut job = Job::create("test");
 
@@ -156,6 +159,7 @@ mod tests {
             1,
             ctx.index_loader()
                 .load_index("test", None)
+                .unwrap()
                 .reader()
                 .unwrap()
                 .searcher()

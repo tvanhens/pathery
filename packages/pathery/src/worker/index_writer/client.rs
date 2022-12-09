@@ -72,7 +72,7 @@ pub mod test_utils {
     #[async_trait]
     impl IndexWriterClient for TestIndexWriterClient {
         async fn submit_job(&self, job: Job) -> Result<String, ServiceError> {
-            let index = self.index_loader.load_index(&job.index_id, None);
+            let index = self.index_loader.load_index(&job.index_id, None)?;
 
             let mut writer = index.default_writer();
 

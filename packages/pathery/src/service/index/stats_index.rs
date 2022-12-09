@@ -32,7 +32,7 @@ impl ServiceHandler<json::Value, IndexStatsResponse> for StatsIndexService {
     ) -> ServiceResponse<IndexStatsResponse> {
         let index_id = request.path_param("index_id")?;
 
-        let index = self.index_loader.load_index(&index_id, None);
+        let index = self.index_loader.load_index(&index_id, None)?;
 
         let metas = index.load_metas().unwrap();
 

@@ -33,7 +33,7 @@ impl ServiceHandler<json::Value, PostIndexResponse> for PostIndexService {
 
         let index_id = request.path_param("index_id")?;
 
-        let schema = self.schema_loader.load_schema(&index_id);
+        let schema = self.schema_loader.load_schema(&index_id)?;
 
         let document = SearchDoc::from_json(&schema, body)
             .map_err(|err| ServiceError::invalid_request(&err.to_string()))?;

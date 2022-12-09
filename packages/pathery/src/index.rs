@@ -7,9 +7,14 @@ use tantivy::{Index, IndexWriter};
 
 use crate::directory::PatheryDirectory;
 use crate::schema::{SchemaLoader, SchemaProvider};
+use crate::service::ServiceError;
 
 pub trait IndexLoader: Send + Sync {
-    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index;
+    fn load_index(
+        &self,
+        index_id: &str,
+        with_partition: Option<(usize, usize)>,
+    ) -> Result<Index, ServiceError>;
 }
 
 pub struct LambdaIndexLoader {
@@ -25,7 +30,11 @@ impl LambdaIndexLoader {
 }
 
 impl IndexLoader for LambdaIndexLoader {
-    fn load_index(&self, index_id: &str, with_partition: Option<(usize, usize)>) -> Index {
+    fn load_index(
+        &self,
+        index_id: &str,
+        with_partition: Option<(usize, usize)>,
+    ) -> Result<Index, ServiceError> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let mut index =
@@ -33,7 +42,7 @@ impl IndexLoader for LambdaIndexLoader {
                 Index::open(existing_dir).expect("Index should be openable")
             } else {
                 fs::create_dir(&directory_path).expect("Directory should be creatable");
-                let schema = self.schema_loader.load_schema(index_id);
+                let schema = self.schema_loader.load_schema(index_id)?;
                 Index::create_in_dir(Path::new(&directory_path), schema)
                     .expect("Index should be creatable")
             };
@@ -42,7 +51,7 @@ impl IndexLoader for LambdaIndexLoader {
             .set_default_multithread_executor()
             .expect("default multithread executor should succeed");
 
-        index
+        Ok(index)
     }
 }
 
@@ -97,16 +106,20 @@ pub mod test_util {
     }
 
     impl IndexLoader for TestIndexLoader {
-        fn load_index(&self, index_id: &str, _with_partition: Option<(usize, usize)>) -> Index {
+        fn load_index(
+            &self,
+            index_id: &str,
+            _with_partition: Option<(usize, usize)>,
+        ) -> Result<Index, ServiceError> {
             let mut table = self.table.lock().unwrap();
 
             let entry = (*table).entry(index_id.into());
 
-            let schema = self.schema_loader.load_schema(index_id);
+            let schema = self.schema_loader.load_schema(index_id)?;
 
             let index = entry.or_insert_with(|| Index::create_in_ram(schema));
 
-            index.clone()
+            Ok(index.clone())
         }
     }
 

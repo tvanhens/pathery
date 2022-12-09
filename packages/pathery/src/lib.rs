@@ -36,7 +36,7 @@ pub mod test_utils {
 
     impl TestContext {
         pub async fn with_documents(self, index_id: &str, docs: Vec<json::Value>) -> TestContext {
-            let schema = self.schema_loader.load_schema(index_id);
+            let schema = self.schema_loader.load_schema(index_id).unwrap();
             let documents: Vec<_> = docs
                 .into_iter()
                 .map(|value| SearchDoc::from_json(&schema, value).unwrap())
