@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::error::Error;
 use std::result::Result as StdResult;
 
 use async_trait::async_trait;
@@ -14,16 +14,16 @@ use crate::service::ServiceError;
 use crate::util;
 
 impl<T> From<SdkError<T>> for ServiceError
-where SdkError<T>: Display
+where T: Error + Sync + Send + 'static
 {
     fn from(sdk_err: SdkError<T>) -> Self {
-        ServiceError::InternalError(sdk_err.to_string())
+        ServiceError::internal_error(sdk_err)
     }
 }
 
 impl From<serde_dynamo::Error> for ServiceError {
     fn from(err: serde_dynamo::Error) -> Self {
-        ServiceError::internal_error(&err.to_string())
+        ServiceError::internal_error(err)
     }
 }
 

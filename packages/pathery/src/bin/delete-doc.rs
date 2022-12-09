@@ -1,16 +1,9 @@
-use pathery::lambda;
-use pathery::lambda::http::HttpRequest;
-use pathery::service::doc::delete_doc;
-use pathery::worker::index_writer::client::LambdaIndexWriterClient;
+use pathery::service::doc::DeleteDocService;
+use pathery::service::start_service;
 
 #[tokio::main]
 async fn main() -> Result<(), lambda_http::Error> {
-    lambda::init_tracing();
+    let service = DeleteDocService::create().await;
 
-    let client = LambdaIndexWriterClient::create(None).await;
-
-    lambda_http::run(lambda_http::service_fn(|event: HttpRequest| {
-        delete_doc(&client, event.into())
-    }))
-    .await
+    start_service(&service).await
 }

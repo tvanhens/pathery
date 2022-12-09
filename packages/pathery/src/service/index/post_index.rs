@@ -114,10 +114,8 @@ mod tests {
 
         let response = service.handle_request(request).await.unwrap_err();
 
-        assert_eq!(
-            ServiceError::invalid_request("json value is not an object"),
-            response
-        );
+        assert_eq!(400, response.status());
+        assert_eq!("json value is not an object", response.message());
     }
 
     #[tokio::test]
@@ -130,12 +128,11 @@ mod tests {
 
         let response = service.handle_request(request).await.unwrap_err();
 
+        assert_eq!(400, response.status());
         assert_eq!(
-            ServiceError::invalid_request(
-                "The field '\"title\"' could not be parsed: TypeError { expected: \"a string\", \
-                 json: Number(1) }"
-            ),
-            response
+            "The field '\"title\"' could not be parsed: TypeError { expected: \"a string\", json: \
+             Number(1) }",
+            response.message()
         );
     }
 
@@ -153,9 +150,7 @@ mod tests {
 
         // Empty because the non-existent field does not explicitly trigger a failure - it just
         // doesn't get indexed.
-        assert_eq!(
-            ServiceError::invalid_request("cannot index empty document"),
-            response,
-        );
+        assert_eq!(400, response.status());
+        assert_eq!("cannot index empty document", response.message());
     }
 }

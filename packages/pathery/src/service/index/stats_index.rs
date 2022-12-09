@@ -1,11 +1,11 @@
 use std::fs;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
 
-use super::PathParams;
-use crate::index::IndexLoader;
-use crate::lambda::http::{success, HandlerResult, ServiceRequest};
+use crate::index::{IndexLoader, IndexProvider};
+use crate::service::{ServiceHandler, ServiceRequest, ServiceResponse};
 
 #[derive(Serialize, Deserialize)]
 pub struct SegmentStats {
@@ -20,56 +20,68 @@ pub struct IndexStatsResponse {
     segments: Vec<SegmentStats>,
 }
 
-pub async fn stats_index(
-    index_loader: &dyn IndexLoader,
-    request: ServiceRequest<Option<json::Value>, PathParams>,
-) -> HandlerResult {
-    let (_body, path_params) = match request.into_parts() {
-        Ok(parts) => parts,
-        Err(response) => return Ok(response),
-    };
+pub struct StatsIndexService {
+    index_loader: Box<dyn IndexLoader>,
+}
 
-    let index_id = path_params.index_id;
+#[async_trait]
+impl ServiceHandler<json::Value, IndexStatsResponse> for StatsIndexService {
+    async fn handle_request(
+        &self,
+        request: ServiceRequest<json::Value>,
+    ) -> ServiceResponse<IndexStatsResponse> {
+        let index_id = request.path_param("index_id")?;
 
-    let index = index_loader.load_index(&index_id, None);
+        let index = self.index_loader.load_index(&index_id, None);
 
-    let metas = index.load_metas().unwrap();
+        let metas = index.load_metas().unwrap();
 
-    let segment_files = fs::read_dir(format!("/mnt/pathery-data/{index_id}"))
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .collect::<Vec<_>>();
+        let segment_files = fs::read_dir(format!("/mnt/pathery-data/{index_id}"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .collect::<Vec<_>>();
 
-    let segments = metas
-        .segments
-        .iter()
-        .map(|s| {
-            let segment_id = s.id().uuid_string();
+        let segments = metas
+            .segments
+            .iter()
+            .map(|s| {
+                let segment_id = s.id().uuid_string();
 
-            let index_size_bytes: u64 = segment_files
-                .iter()
-                .filter_map(|entry| {
-                    let filename = entry.file_name();
-                    let filename = filename.to_str()?;
+                let index_size_bytes: u64 = segment_files
+                    .iter()
+                    .filter_map(|entry| {
+                        let filename = entry.file_name();
+                        let filename = filename.to_str()?;
 
-                    filename
-                        .starts_with(&segment_id)
-                        .then(|| entry.metadata())
-                        .and_then(Result::ok)
-                        .map(|m| m.len())
-                })
-                .sum();
+                        filename
+                            .starts_with(&segment_id)
+                            .then(|| entry.metadata())
+                            .and_then(Result::ok)
+                            .map(|m| m.len())
+                    })
+                    .sum();
 
-            let index_size_mb: f64 = index_size_bytes as f64 / 1_000_000f64;
+                let index_size_mb: f64 = index_size_bytes as f64 / 1_000_000f64;
 
-            SegmentStats {
-                id: s.id().uuid_string(),
-                num_docs: s.num_docs(),
-                num_deleted: s.num_deleted_docs(),
-                index_size: index_size_mb,
-            }
-        })
-        .collect();
+                SegmentStats {
+                    id: s.id().uuid_string(),
+                    num_docs: s.num_docs(),
+                    num_deleted: s.num_deleted_docs(),
+                    index_size: index_size_mb,
+                }
+            })
+            .collect();
 
-    success(&IndexStatsResponse { segments })
+        Ok(IndexStatsResponse { segments })
+    }
+}
+
+impl StatsIndexService {
+    pub async fn create() -> Self {
+        let index_loader = IndexProvider::lambda();
+
+        StatsIndexService {
+            index_loader: Box::new(index_loader),
+        }
+    }
 }
