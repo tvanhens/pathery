@@ -102,6 +102,11 @@ pub mod test_utils {
                             "name": "year",
                             "kind": "i64",
                             "flags": ["INDEXED"]
+                        },
+                        {
+                            "name": "props",
+                            "kind": "json",
+                            "flags": ["TEXT"]
                         }
                     ]
                 }

@@ -38,10 +38,13 @@ export type DateFieldConfig = FieldConfig<"date", "INDEXED" | "FAST">;
 
 export type IntegerFieldConfig = FieldConfig<"i64", "INDEXED" | "FAST">;
 
+export type JsonFieldConfig = FieldConfig<"json", "TEXT">;
+
 export type IndexFieldConfig =
   | TextFieldConfig
   | DateFieldConfig
-  | IntegerFieldConfig;
+  | IntegerFieldConfig
+  | JsonFieldConfig;
 
 export interface IndexConfig {
   /**
