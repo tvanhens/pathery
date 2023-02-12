@@ -259,4 +259,32 @@ mod tests {
 
         assert_eq!(1, response.matches.len());
     }
+
+    #[tokio::test]
+    async fn query_document_with_json_field() {
+        let ctx = setup()
+            .with_documents(
+                "test",
+                vec![json!({
+                    "__id": "foobar",
+                    "title": "hello",
+                    "props": {
+                        "foo": "bar"
+                    }
+                })],
+            )
+            .await;
+
+        let service = test_service(&ctx);
+
+        let request = ServiceRequest::create(QueryRequest {
+            query: "props.foo:bar".into(),
+            with_partition: None,
+        })
+        .with_path_param("index_id", "test");
+
+        let response = service.handle_request(request).await.unwrap();
+
+        assert_eq!(1, response.matches.len());
+    }
 }

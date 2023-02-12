@@ -21,6 +21,11 @@ pub enum NumericFieldOption {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum JsonFieldOption {
+    TEXT,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "kind")]
 pub enum FieldConfig {
     #[serde(rename = "text")]
@@ -37,6 +42,11 @@ pub enum FieldConfig {
     IntegerFieldConfig {
         name: String,
         flags: Vec<NumericFieldOption>,
+    },
+    #[serde(rename = "json")]
+    JsonFieldConfig {
+        name: String,
+        flags: Vec<JsonFieldOption>,
     },
 }
 
@@ -137,6 +147,15 @@ impl SchemaLoader for SchemaProvider {
                 FieldConfig::IntegerFieldConfig { name, flags } => {
                     schema.add_i64_field(name, numeric_field_options(flags));
                 }
+                FieldConfig::JsonFieldConfig { name, flags } => {
+                    let field_opts =
+                        flags
+                            .iter()
+                            .fold(TextOptions::default(), |acc, opt| match opt {
+                                JsonFieldOption::TEXT => acc | schema::TEXT,
+                            });
+                    schema.add_json_field(name, field_opts);
+                }
             }
         }
 
@@ -181,6 +200,11 @@ mod tests {
                             "flags": ["INDEXED", "FAST"],
                             "kind": "i64",
                         },
+                        {
+                            "name": "meta",
+                            "flags": ["TEXT"],
+                            "kind": "json"
+                        }
                     ],
             }]
         });

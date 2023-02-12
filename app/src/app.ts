@@ -40,6 +40,11 @@ const pathery = new PatheryStack(app, "pathery-dev", {
             flags: ["TEXT"],
             kind: "text",
           },
+          {
+            name: "meta",
+            flags: ["TEXT"],
+            kind: "json",
+          },
         ],
       },
     ],
