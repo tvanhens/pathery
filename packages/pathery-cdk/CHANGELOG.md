@@ -1,5 +1,19 @@
 # @pathery/cdk
 
+## 0.1.1
+
+### Patch Changes
+
+- 61cd70b: Fix: documents were not serializing to writer queue correctly.
+- 22598b6: Feature: Allow query handler memory size to be specified via CDK construct.
+- ea2676c: Add json field type to schema config.
+- 534908c: Fix: 404 error for missing index config
+- 576d352: Feature: Partition queries using the optional with_partition body param.
+- 534908c: Improvement: Use DynamoDB for original document storage.
+- 534908c: Fix: allow empty body for delete doc request
+- 653cd03: Feature: Add date field type.
+- 61cd70b: Feature: add i64 as index field type
+
 ## 0.1.0
 
 ### Minor Changes
