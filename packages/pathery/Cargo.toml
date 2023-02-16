@@ -1,7 +1,7 @@
 [package]
+edition = "2021"
 name = "pathery"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 anyhow = "1.0.66"
@@ -13,15 +13,16 @@ aws-sdk-sqs = "0.21.0"
 aws_lambda_events = "0.7.2"
 chrono = "0.4.23"
 http = "0.2.8"
-lambda_http = { version = "0.7", default-features = false, features = ["apigw_rest"] }
+lambda_http = {version = "0.7", default-features = false, features = ["apigw_rest"]}
 lambda_runtime = "0.7"
-serde = { version = "1.0.147", features = ["derive"] }
-serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+0_21"] }
+serde = {version = "1.0.147", features = ["derive"]}
+serde_dynamo = {version = "4", features = ["aws-sdk-dynamodb+0_21"]}
 serde_json = "1.0.87"
-tantivy = { version = "0.18.1" }
+tantivy = {version = "0.18.1"}
 tantivy-common = "0.3.0"
 thiserror = "1.0.37"
-tokio = { version = "1", features = ["full"] }
-tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }
+tokio = {version = "1", features = ["full"]}
+tracing = {version = "0.1", features = ["log"]}
+tracing-subscriber = {version = "0.3", default-features = false, features = ["fmt", "json", "std"]}
 uuid = "1.2.1"
+zstd = "0.12.3"

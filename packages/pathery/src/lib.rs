@@ -3,6 +3,7 @@ pub mod index;
 pub mod lambda;
 pub mod schema;
 pub mod search_doc;
+pub mod serialize;
 pub mod service;
 pub mod store;
 pub mod util;

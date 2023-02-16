@@ -4,6 +4,7 @@ use tantivy::schema::{DocParsingError, Schema};
 use tantivy::Document;
 use thiserror::Error;
 
+use crate::serialize::compressed_json;
 use crate::util;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -71,6 +72,7 @@ impl SearchDocId {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SearchDoc {
     id: SearchDocId,
+    #[serde(with = "compressed_json")]
     content: Map<String, Value>,
 }
 
