@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.2.0
+
+### Minor Changes
+
+- b19295c: Compressed stored document representation.
+
 ## 0.1.1
 
 ### Patch Changes
