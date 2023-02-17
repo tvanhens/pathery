@@ -8,42 +8,27 @@ const pathery = new PatheryStack(app, "pathery-dev", {
   config: {
     indexes: [
       {
-        prefix: "libgen-index-v2",
+        prefix: "test-index-v1",
         fields: [
-          {
-            name: "title",
-            flags: ["TEXT"],
-            kind: "text",
-          },
-          {
-            name: "identifier",
-            flags: ["STRING"],
-            kind: "text",
-          },
-          {
-            name: "year",
-            flags: ["INDEXED"],
-            kind: "i64",
-          },
           {
             name: "author",
             flags: ["TEXT"],
             kind: "text",
           },
           {
-            name: "publisher",
+            name: "song",
             flags: ["TEXT"],
             kind: "text",
           },
           {
-            name: "description",
-            flags: ["TEXT"],
+            name: "genre",
+            flags: ["STRING"],
             kind: "text",
           },
           {
-            name: "meta",
-            flags: ["TEXT"],
-            kind: "json",
+            name: "releaseDate",
+            flags: ["INDEXED"],
+            kind: "i64",
           },
         ],
       },

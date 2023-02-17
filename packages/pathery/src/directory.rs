@@ -1,9 +1,14 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use tantivy::directory::error::OpenDirectoryError;
 use tantivy::directory::{DirectoryLock, MmapDirectory};
 use tantivy::Directory;
+use tokio::runtime::Handle;
+
+use crate::worker::async_delete::client::AsyncDeleteClient;
+use crate::worker::async_delete::job::AsyncDeleteJob;
 
 struct NoopLockGuard;
 
@@ -12,26 +17,35 @@ struct NoopLockGuard;
 /// Using a FIFO SQS queue for orchestrating indexing removes the need for a lockfile.
 #[derive(Clone, Debug)]
 pub struct PatheryDirectory {
+    directory_path: PathBuf,
+
     partition_n: usize,
 
     total_partitions: usize,
 
     inner: MmapDirectory,
+
+    async_delete_client: Arc<dyn AsyncDeleteClient>,
+
+    handle: Handle,
 }
 
 impl PatheryDirectory {
     pub fn open<P>(
         directory_path: P,
         with_partition: Option<(usize, usize)>,
+        async_delete_client: &Arc<dyn AsyncDeleteClient>,
     ) -> Result<PatheryDirectory, OpenDirectoryError>
     where
         P: AsRef<Path>,
     {
-        let inner = MmapDirectory::open(directory_path)?;
         Ok(PatheryDirectory {
+            directory_path: directory_path.as_ref().to_owned(),
             partition_n: with_partition.map(|x| x.0).unwrap_or(0),
             total_partitions: with_partition.map(|x| x.1).unwrap_or(1),
-            inner,
+            inner: MmapDirectory::open(directory_path)?,
+            async_delete_client: Arc::clone(async_delete_client),
+            handle: Handle::try_current().unwrap(),
         })
     }
 }
@@ -46,7 +60,12 @@ impl Directory for PatheryDirectory {
     }
 
     fn delete(&self, path: &std::path::Path) -> Result<(), tantivy::directory::error::DeleteError> {
-        self.inner.delete(path)
+        let path = self.directory_path.join(path.to_path_buf());
+        let job = AsyncDeleteJob::fs_delete(path);
+        self.handle
+            .block_on(self.async_delete_client.submit_job(job))
+            .expect("Message should queue successfully");
+        Ok(())
     }
 
     fn exists(

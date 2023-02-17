@@ -1,13 +1,12 @@
 import * as AWS from "aws-sdk";
 import http, { AxiosError } from "axios";
-import readline from "node:readline";
+import { faker } from "@faker-js/faker";
 
 const maxBatch = 20_000;
-const bucketName = "pathery-test-data-databuckete3889a50-11yc5palv3nvl";
 const batchSize = 25;
 const patheryEndpoint =
   "https://nlztni8cx5.execute-api.us-east-1.amazonaws.com/prod/";
-const index_id = "libgen-index-v2-1";
+const index_id = "test-index-v1-3";
 const apiKeyId = "7xyag5xp0d";
 
 const api = new AWS.APIGateway();
@@ -65,58 +64,22 @@ async function uploadBatch(apiKey: string, batch: any[]) {
 }
 
 export async function* batchGenerator() {
-  const readStream = s3
-    .getObject({
-      Bucket: bucketName,
-      Key: "libgen.json",
-    })
-    .createReadStream();
-
-  const rl = readline.createInterface({
-    input: readStream,
-    crlfDelay: Infinity,
-  });
-
   let batchNum = 1;
 
   let batch: unknown[] = [];
 
-  for await (const line of rl) {
+  while (true) {
     if (batchNum > maxBatch) {
       return batch;
     }
-    const next = JSON.parse(line);
-
-    if (!next) {
-      break;
-    }
-
-    const alreadyInBatch = batch.find(
-      ({ __id }: any) => __id === `libgen_${next.id}`
-    );
-
-    if (!!alreadyInBatch) {
-      continue;
-    }
-
-    const formatted = {
-      ...(next.id && { __id: `libgen_${next.id}` }),
-      ...(next.title && { title: next.title }),
-      ...(next.identifier && { identifier: next.identifier }),
-      ...(next.author && { author: next.author }),
-      ...(next.publisher && { publisher: next.publisher }),
-      ...(next.descr && { description: next.descr }),
-      ...(next.year &&
-        !isNaN(Number.parseInt(next.year)) && {
-          year: Number.parseInt(next.year),
-        }),
+    const next = {
+      author: faker.name.fullName(),
+      song: faker.music.songName(),
+      genre: faker.music.genre(),
+      releaseDate: faker.date.past().getTime(),
     };
 
-    if (Object.keys(formatted).length <= 1) {
-      continue;
-    }
-
-    batch.push(formatted);
+    batch.push(next);
 
     if (batch.length >= batchSize) {
       console.log(`Uploading batch #${batchNum++}`);
@@ -126,8 +89,6 @@ export async function* batchGenerator() {
       batch = [];
     }
   }
-
-  return batch;
 }
 
 async function startUploader(

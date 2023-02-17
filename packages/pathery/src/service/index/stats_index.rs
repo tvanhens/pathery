@@ -81,7 +81,7 @@ impl StatsIndexService {
         let index_loader = LambdaIndexLoader::create();
 
         StatsIndexService {
-            index_loader: Box::new(index_loader),
+            index_loader: Box::new(index_loader.await),
         }
     }
 }

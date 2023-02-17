@@ -10,7 +10,7 @@ async fn main() -> Result<(), sqs::Error> {
     lambda::init_tracing();
 
     let document_store = DDBDocumentStore::create(None).await;
-    let index_loader = LambdaIndexLoader::create();
+    let index_loader = LambdaIndexLoader::create().await;
 
     run(service_fn(|event| {
         handle_event(&document_store, &index_loader, event)

@@ -42,9 +42,11 @@ importers:
 
   integration-test:
     specifiers:
+      '@faker-js/faker': ^7.6.0
       aws-sdk: ^2.1262.0
       axios: ^1.2.0
     dependencies:
+      '@faker-js/faker': 7.6.0
       aws-sdk: 2.1262.0
       axios: 1.2.0
 
@@ -621,6 +623,11 @@ packages:
     requiresBuild: true
     dev: false
     optional: true
+
+  /@faker-js/faker/7.6.0:
+    resolution: {integrity: sha512-XK6BTq1NDMo9Xqw/YkYyGjSsg44fbNwYRx7QK2CuoQgyy+f1rrTDHoExVM5PsyXCtfl2vs2vVJ0MN0yN6LppRw==}
+    engines: {node: '>=14.0.0', npm: '>=6.0.0'}
+    dev: false
 
   /@jridgewell/gen-mapping/0.3.2:
     resolution: {integrity: sha512-mh65xKQAzI6iBcFzwv28KVWSmCkdRBWoOh+bYQGW3+6OZvbbN3TqMGo5hqYxQniRcH9F2VZIoJCm4pa3BPDK/A==}

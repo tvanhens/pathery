@@ -1,4 +1,10 @@
-import { Stack, aws_lambda, CfnOutput, Duration } from "aws-cdk-lib";
+import {
+  Stack,
+  aws_lambda,
+  CfnOutput,
+  Duration,
+  StackProps,
+} from "aws-cdk-lib";
 import {
   ApiKey,
   EndpointType,
@@ -7,6 +13,7 @@ import {
 } from "aws-cdk-lib/aws-apigateway";
 import {
   GatewayVpcEndpointAwsService,
+  InterfaceVpcEndpointAwsService,
   SubnetType,
   Vpc,
 } from "aws-cdk-lib/aws-ec2";
@@ -28,7 +35,7 @@ import {
   Table,
 } from "aws-cdk-lib/aws-dynamodb";
 
-export interface PatheryStackProps {
+export interface PatheryStackProps extends StackProps {
   config: PatheryConfig;
 
   /**
@@ -74,8 +81,10 @@ export class PatheryStack extends Stack {
 
   private indexWriterQueue: IQueue;
 
+  private deleteQueue: IQueue;
+
   constructor(scope: Construct, id: string, props: PatheryStackProps) {
-    super(scope, id);
+    super(scope, id, props);
 
     this.table = new Table(this, "DataTable", {
       billingMode: BillingMode.PAY_PER_REQUEST,
@@ -91,6 +100,11 @@ export class PatheryStack extends Stack {
     });
 
     this.bucket = new Bucket(this, "DataBucket");
+
+    this.deleteQueue = new Queue(this, "DeleteQueue", {
+      deliveryDelay: Duration.minutes(15),
+      visibilityTimeout: Duration.minutes(2),
+    });
 
     this.indexWriterQueue = new Queue(this, "IndexWriterQueue", {
       fifo: true,
@@ -114,6 +128,11 @@ export class PatheryStack extends Stack {
     vpc.addGatewayEndpoint("DynamoEndpoint", {
       service: GatewayVpcEndpointAwsService.DYNAMODB,
     });
+
+    const sqsEndpoint = vpc.addInterfaceEndpoint("SqsGateway", {
+      service: InterfaceVpcEndpointAwsService.SQS,
+    });
+    sqsEndpoint.connections.allowDefaultPortFromAnyIpv4();
 
     const efs = new FileSystem(this, "Filesystem", {
       vpc,
@@ -166,6 +185,10 @@ export class PatheryStack extends Stack {
     queryIndex.addLayers(configLayer);
     this.table.grantReadData(queryIndex);
     queryIndex.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
+    queryIndex.addEnvironment(
+      "ASYNC_DELETE_QUEUE_URL",
+      this.deleteQueue.queueUrl
+    );
 
     const statsIndex = new RustFunction(this, "stats-index", {
       vpc,
@@ -260,6 +283,30 @@ export class PatheryStack extends Stack {
     );
     this.table.grantReadWriteData(indexWriterWorker);
     indexWriterWorker.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
+    this.deleteQueue.grantSendMessages(indexWriterWorker);
+    indexWriterWorker.addEnvironment(
+      "ASYNC_DELETE_QUEUE_URL",
+      this.deleteQueue.queueUrl
+    );
+
+    const asyncDeleteWorker = new RustFunction(this, "async-delete-worker", {
+      memorySize: props.indexWriter?.memorySize ?? 2048,
+      timeout: props.indexWriter?.timeout ?? Duration.minutes(1),
+      vpc,
+      vpcSubnets: {
+        subnets: vpc.isolatedSubnets,
+      },
+      filesystem: aws_lambda.FileSystem.fromEfsAccessPoint(
+        accessPoint,
+        "/mnt/pathery-data"
+      ),
+    });
+    asyncDeleteWorker.addLayers(configLayer);
+    asyncDeleteWorker.addEventSource(
+      new SqsEventSource(this.deleteQueue, {
+        batchSize: 10,
+      })
+    );
 
     new PatheryDashboard(this, "Dashboard", {
       indexWriterWorker,

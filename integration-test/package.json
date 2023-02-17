@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@faker-js/faker": "^7.6.0",
     "aws-sdk": "^2.1262.0",
     "axios": "^1.2.0"
   }

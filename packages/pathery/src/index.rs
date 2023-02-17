@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use tantivy::merge_policy::DefaultMergePolicy;
 use tantivy::schema::Field;
@@ -8,6 +9,7 @@ use tantivy::{Index, IndexWriter};
 use crate::directory::PatheryDirectory;
 use crate::schema::{SchemaLoader, SchemaProvider};
 use crate::service::ServiceError;
+use crate::worker::async_delete::client::{AsyncDeleteClient, LambdaAsyncDeleteClient};
 
 pub trait IndexLoader: Send + Sync {
     fn load_index(
@@ -19,12 +21,18 @@ pub trait IndexLoader: Send + Sync {
 
 pub struct LambdaIndexLoader {
     schema_loader: SchemaProvider,
+
+    async_delete_client: Arc<dyn AsyncDeleteClient>,
 }
 
 impl LambdaIndexLoader {
-    pub fn create() -> Self {
+    pub async fn create() -> Self {
+        let async_delete_client = LambdaAsyncDeleteClient::create(None).await;
+        let async_delete_client = Arc::new(async_delete_client);
+
         Self {
             schema_loader: SchemaProvider::lambda(),
+            async_delete_client,
         }
     }
 }
@@ -37,15 +45,16 @@ impl IndexLoader for LambdaIndexLoader {
     ) -> Result<Index, ServiceError> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
-        let mut index =
-            if let Ok(existing_dir) = PatheryDirectory::open(&directory_path, with_partition) {
-                Index::open(existing_dir).expect("Index should be openable")
-            } else {
-                fs::create_dir(&directory_path).expect("Directory should be creatable");
-                let schema = self.schema_loader.load_schema(index_id)?;
-                Index::create_in_dir(Path::new(&directory_path), schema)
-                    .expect("Index should be creatable")
-            };
+        let mut index = if let Ok(existing_dir) =
+            PatheryDirectory::open(&directory_path, with_partition, &self.async_delete_client)
+        {
+            Index::open(existing_dir).expect("Index should be openable")
+        } else {
+            fs::create_dir(&directory_path).expect("Directory should be creatable");
+            let schema = self.schema_loader.load_schema(index_id)?;
+            Index::create_in_dir(Path::new(&directory_path), schema)
+                .expect("Index should be creatable")
+        };
 
         index
             .set_default_multithread_executor()

@@ -176,7 +176,7 @@ impl QueryIndexService {
 
         QueryIndexService {
             document_store: Box::new(document_store),
-            index_loader: Box::new(index_loader),
+            index_loader: Box::new(index_loader.await),
         }
     }
 }
