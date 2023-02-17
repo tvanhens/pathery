@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.2.1
+
+### Patch Changes
+
+- f4f3868: fix: run deletes async on delay queue
+
 ## 0.2.0
 
 ### Minor Changes
