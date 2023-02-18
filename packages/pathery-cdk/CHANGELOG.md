@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.2.3
+
+### Patch Changes
+
+- 3b2b99b: fix: stats endpoint missing env var
+
 ## 0.2.2
 
 ### Patch Changes
