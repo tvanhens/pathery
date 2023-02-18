@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.2.4
+
+### Patch Changes
+
+- 371ab81: fix: run requests in parallel
+
 ## 0.2.3
 
 ### Patch Changes
