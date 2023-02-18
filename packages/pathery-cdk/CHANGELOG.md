@@ -1,5 +1,11 @@
 # @pathery/cdk
 
+## 0.2.5
+
+### Patch Changes
+
+- a97b5b2: feat: enable multithreading for query partition lambda
+
 ## 0.2.4
 
 ### Patch Changes
