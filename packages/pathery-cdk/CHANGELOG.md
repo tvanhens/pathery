@@ -1,5 +1,12 @@
 # @pathery/cdk
 
+## 0.2.2
+
+### Patch Changes
+
+- 6e4ad31: Feature: automatically fan out queries as index grows
+- 3142bbf: feat: add pagination via pagination token
+
 ## 0.2.1
 
 ### Patch Changes
