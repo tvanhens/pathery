@@ -13,7 +13,7 @@ Pathery is a **serverless search service** built on AWS using Rust, CDK and [Tan
 - **👍 Easy to install**. Ships as a CDK Component, making it easy to [get started][get-started].
 - **💵 Usage based infra**. No long running servers, only pay for what you use.
 - **🔼 Built for AWS**. Leans on AWS managed services to limit maintenance burden and maximize scalability.
-  - Document store: [DynamoDB]([url](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html))
+  - Document store: [DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html)
   - Index store: [Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html)
   - Index writer & handler: [Lambda](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html)
   - Index queue: [SQS](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/welcome.html)
