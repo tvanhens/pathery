@@ -7,6 +7,7 @@ use tantivy::directory::{DirectoryLock, MmapDirectory};
 use tantivy::Directory;
 use tokio::runtime::Handle;
 
+use crate::pagination::SegmentMeta;
 use crate::worker::async_delete::client::AsyncDeleteClient;
 use crate::worker::async_delete::job::AsyncDeleteJob;
 
@@ -19,9 +20,7 @@ struct NoopLockGuard;
 pub struct PatheryDirectory {
     directory_path: PathBuf,
 
-    partition_n: usize,
-
-    total_partitions: usize,
+    segments: Option<Vec<SegmentMeta>>,
 
     inner: MmapDirectory,
 
@@ -33,16 +32,15 @@ pub struct PatheryDirectory {
 impl PatheryDirectory {
     pub fn open<P>(
         directory_path: P,
-        with_partition: Option<(usize, usize)>,
         async_delete_client: &Arc<dyn AsyncDeleteClient>,
+        segments: Option<Vec<SegmentMeta>>,
     ) -> Result<PatheryDirectory, OpenDirectoryError>
     where
         P: AsRef<Path>,
     {
         Ok(PatheryDirectory {
             directory_path: directory_path.as_ref().to_owned(),
-            partition_n: with_partition.map(|x| x.0).unwrap_or(0),
-            total_partitions: with_partition.map(|x| x.1).unwrap_or(1),
+            segments,
             inner: MmapDirectory::open(directory_path)?,
             async_delete_client: Arc::clone(async_delete_client),
             handle: Handle::try_current().unwrap(),
@@ -90,30 +88,30 @@ impl Directory for PatheryDirectory {
 
         // check that we are returning meta.json
         if path == Path::new("meta.json") {
-            let mut meta: HashMap<String, serde_json::Value> =
-                serde_json::from_slice(&result[..]).expect("meta.json should be parsable");
+            if let Some(segments) = &self.segments {
+                let mut meta: HashMap<String, serde_json::Value> =
+                    serde_json::from_slice(&result[..]).expect("meta.json should be parsable");
 
-            let segments = meta
-                .get("segments")
-                .and_then(|s| s.as_array())
-                .expect("segments should be set");
+                // let segments = meta
+                //     .get("segments")
+                //     .and_then(|s| s.as_array())
+                //     .expect("segments should be set");
 
-            let filtered_segments: Vec<_> = segments
-                .iter()
-                .enumerate()
-                .filter(|(idx, _)| (idx + self.partition_n) % self.total_partitions == 0)
-                .map(|(_, v)| v.to_owned())
-                .collect();
+                // let filtered_segments: Vec<_> = segments
+                //     .iter()
+                //     .enumerate()
+                //     .filter(|(idx, _)| (idx + self.partition_n) % self.total_partitions == 0)
+                //     .map(|(_, v)| v.to_owned())
+                //     .collect();
+                let segments = serde_json::to_value(segments).unwrap();
 
-            meta.insert(
-                String::from("segments"),
-                serde_json::Value::Array(filtered_segments),
-            );
+                meta.insert(String::from("segments"), segments);
 
-            Ok(serde_json::to_vec(&meta).expect("meta.json should serialize"))
-        } else {
-            Ok(result)
+                return Ok(serde_json::to_vec(&meta).expect("meta.json should serialize"));
+            }
         }
+
+        Ok(result)
     }
 
     fn atomic_write(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {

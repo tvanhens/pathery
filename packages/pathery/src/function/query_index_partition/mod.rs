@@ -8,6 +8,7 @@ use tantivy::schema::{Field, FieldType};
 use tantivy::{DocAddress, Score};
 
 use crate::index::IndexLoader;
+use crate::pagination::SegmentMeta;
 use crate::service::ServiceError;
 use crate::store::document::SearchDocRef;
 
@@ -15,15 +16,16 @@ use crate::store::document::SearchDocRef;
 pub struct QueryRequest {
     pub index_id: String,
     pub query: String,
+    pub offset: usize,
     pub partition_n: usize,
-    pub total_partitions: usize,
+    pub segments: Vec<SegmentMeta>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct PartitionSearchHit {
     pub doc_ref: SearchDocRef,
     pub score: f32,
-    pub parition_n: usize,
+    pub partition_n: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -38,8 +40,7 @@ pub async fn handle_event(
     let body = event.payload;
     let index_id = body.index_id;
 
-    let index =
-        index_loader.load_index(&index_id, Some((body.partition_n, body.total_partitions)))?;
+    let index = index_loader.load_index(&index_id, Some(body.segments))?;
 
     let reader = index.reader().expect("Reader should load");
 
@@ -67,8 +68,10 @@ pub async fn handle_event(
         .parse_query(&body.query)
         .map_err(|err| ServiceError::invalid_request(&err.to_string()))?;
 
+    let collector = TopDocs::with_limit(10).and_offset(body.offset);
+
     let top_docs: Vec<(Score, DocAddress)> = searcher
-        .search(&query, &TopDocs::with_limit(10))
+        .search(&query, &collector)
         .expect("search should succeed");
 
     let matches: Vec<_> = top_docs
@@ -83,7 +86,7 @@ pub async fn handle_event(
             PartitionSearchHit {
                 doc_ref: stored_ref,
                 score,
-                parition_n: body.partition_n,
+                partition_n: body.partition_n,
             }
         })
         .collect();

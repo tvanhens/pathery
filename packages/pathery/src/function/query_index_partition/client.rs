@@ -1,6 +1,7 @@
 use aws_smithy_types::Blob;
 
 use super::{PartitionQueryResponse, QueryRequest};
+use crate::pagination::SegmentMeta;
 use crate::util;
 
 pub struct LambdaQueryIndexPartitionClient {
@@ -24,8 +25,9 @@ impl LambdaQueryIndexPartitionClient {
         &self,
         index_id: String,
         query: String,
-        total_partitions: usize,
+        offset: usize,
         partition_n: usize,
+        segments: Vec<SegmentMeta>,
     ) -> PartitionQueryResponse {
         // TODO: Error handling and retries
         let request = self.client.invoke();
@@ -33,8 +35,9 @@ impl LambdaQueryIndexPartitionClient {
         let input = QueryRequest {
             index_id,
             query,
+            offset,
             partition_n,
-            total_partitions,
+            segments,
         };
         let input = serde_json::to_vec(&input).expect("should serialize");
         let input = Blob::new(input);

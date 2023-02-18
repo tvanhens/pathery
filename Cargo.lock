@@ -1487,7 +1487,6 @@ dependencies = [
  "tantivy-common",
  "thiserror",
  "tokio",
- "tokio-stream",
  "tracing",
  "tracing-subscriber",
  "uuid",
