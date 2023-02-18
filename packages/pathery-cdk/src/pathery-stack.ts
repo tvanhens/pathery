@@ -315,7 +315,7 @@ export class PatheryStack extends Stack {
     );
 
     const asyncDeleteWorker = new RustFunction(this, "async-delete-worker", {
-      memorySize: props.indexWriter?.memorySize ?? 2048,
+      memorySize: 2048,
       timeout: props.indexWriter?.timeout ?? Duration.minutes(1),
       vpc,
       vpcSubnets: {

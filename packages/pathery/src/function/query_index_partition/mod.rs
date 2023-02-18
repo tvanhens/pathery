@@ -40,7 +40,9 @@ pub async fn handle_event(
     let body = event.payload;
     let index_id = body.index_id;
 
-    let index = index_loader.load_index(&index_id, Some(body.segments))?;
+    let mut index = index_loader.load_index(&index_id, Some(body.segments))?;
+
+    index.set_default_multithread_executor().unwrap();
 
     let reader = index.reader().expect("Reader should load");
 
