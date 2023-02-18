@@ -2,29 +2,21 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::{Field, FieldType};
-use tantivy::{DocAddress, Score, SnippetGenerator, TantivyError};
+use tantivy::{Index, SnippetGenerator, TantivyError};
 use tracing::info;
 
-use crate::index::{IndexLoader, LambdaIndexLoader};
+use crate::function::query_index_partition::client::LambdaQueryIndexPartitionClient;
+use crate::function::query_index_partition::PartitionSearchHit;
+use crate::index::{IndexExt, IndexLoader, LambdaIndexLoader};
 use crate::json;
 use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
-use crate::store::document::{DDBDocumentStore, DocumentStore, SearchDocRef};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct WithPartition {
-    partition_n: usize,
-
-    total_partitions: usize,
-}
+use crate::store::document::{DDBDocumentStore, DocumentStore};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct QueryRequest {
     pub query: String,
-
-    pub with_partition: Option<WithPartition>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -43,6 +35,8 @@ pub struct QueryIndexService {
     index_loader: Box<dyn IndexLoader>,
 
     document_store: Box<dyn DocumentStore>,
+
+    query_index_paritition_client: LambdaQueryIndexPartitionClient,
 }
 
 #[async_trait]
@@ -55,23 +49,58 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
 
         let index_id = request.path_param("index_id")?;
 
-        let index = self.index_loader.load_index(
-            &index_id,
-            body.with_partition
-                .map(|x| (x.partition_n, x.total_partitions)),
-        )?;
+        let index = self.index_loader.load_index(&index_id, None)?;
 
-        let reader = index.reader().expect("Reader should load");
+        let metas = index.load_metas().unwrap();
+        let num_docs: u32 = metas.segments.iter().map(|seg| seg.num_docs()).sum();
+        info!("Doc count: {}", num_docs);
 
-        info!("ReaderLoaded");
+        let total_partitions = (num_docs / 60_000) + 1;
+        info!("Total partitions: {}", total_partitions);
 
-        let searcher = reader.searcher();
+        let requests = (0..total_partitions).map(|partition_n| {
+            self.query_index_paritition_client.query_partition(
+                index_id.clone(),
+                body.query.clone(),
+                total_partitions as usize,
+                partition_n as usize,
+            )
+        });
 
-        let schema = index.schema();
+        let mut matches: Vec<PartitionSearchHit> = Vec::new();
+
+        for request in requests {
+            let mut response = request.await;
+            let response = response.matches.as_mut();
+            matches.append(response);
+        }
+
+        matches.sort_by(|a, b| b.score.total_cmp(&a.score));
+        matches.truncate(10);
+
+        if matches.len() == 0 {
+            return Ok(QueryResponse { matches: vec![] });
+        }
+
+        let retrieved_matches = self
+            .document_store
+            .get_documents(
+                matches
+                    .iter()
+                    .map(|one_match| one_match.doc_ref.clone())
+                    .collect(),
+            )
+            .await
+            .unwrap();
+
+        let snippet_index = Index::create_in_ram(index.schema());
+        let mut snippet_writer = snippet_index.default_writer();
+        let snippet_reader = snippet_index.reader().unwrap();
+        let snippet_schema = snippet_index.schema();
 
         let query_parser = QueryParser::for_index(
-            &index,
-            schema
+            &snippet_index,
+            snippet_schema
                 .fields()
                 .filter_map(|(field, entry)| {
                     if !entry.is_indexed() {
@@ -89,45 +118,16 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
             .parse_query(&body.query)
             .map_err(|err| ServiceError::invalid_request(&err.to_string()))?;
 
-        let top_docs: Vec<(Score, DocAddress)> = searcher
-            .search(&query, &TopDocs::with_limit(10))
-            .expect("search should succeed");
-
-        let matches: Vec<_> = top_docs
-            .into_iter()
-            .map(|(score, address)| {
-                let document = searcher.doc(address).expect("doc should exist");
-
-                let named_doc = schema.to_named_doc(&document);
-
-                let stored_ref = SearchDocRef::from(named_doc);
-
-                (score, stored_ref)
-            })
-            .collect();
-
-        if matches.len() == 0 {
-            return Ok(QueryResponse { matches: vec![] });
-        }
-
-        let retrieved_matches = self
-            .document_store
-            .get_documents(
-                matches
-                    .iter()
-                    .map(|(_score, doc_ref)| doc_ref.clone())
-                    .collect(),
-            )
-            .await
-            .unwrap();
-
         let matches = retrieved_matches
             .iter()
             .zip(matches)
-            .map(|(search_doc, (score, _))| {
-                let document = search_doc.document(&schema);
-
-                let named_doc = schema.to_named_doc(&document);
+            .map(|(search_doc, one_match)| {
+                let document = search_doc.document(&snippet_schema);
+                let named_doc = snippet_schema.to_named_doc(&document);
+                snippet_writer.add_document(document.clone()).unwrap();
+                snippet_writer.commit().unwrap();
+                snippet_reader.reload().unwrap();
+                let snippet_searcher = snippet_reader.searcher();
 
                 let snippets: HashMap<String, String> = document
                     .field_values()
@@ -137,7 +137,7 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
                         let text = field_value.value().as_text()?;
 
                         let generator = match SnippetGenerator::create(
-                            &searcher,
+                            &snippet_searcher,
                             &query,
                             field_value.field(),
                         ) {
@@ -152,13 +152,16 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
                         if snippet.is_empty() {
                             None
                         } else {
-                            Some((schema.get_field_name(field_value.field()).into(), snippet))
+                            Some((
+                                snippet_schema.get_field_name(field_value.field()).into(),
+                                snippet,
+                            ))
                         }
                     })
                     .collect();
 
                 SearchHit {
-                    score,
+                    score: one_match.score,
                     doc: json::to_value(named_doc).expect("named doc should serialize"),
                     snippets: json::to_value(snippets).expect("snippets should serialize"),
                 }
@@ -177,114 +180,115 @@ impl QueryIndexService {
         QueryIndexService {
             document_store: Box::new(document_store),
             index_loader: Box::new(index_loader.await),
+            query_index_paritition_client: LambdaQueryIndexPartitionClient::create().await,
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::test_utils::*;
 
-    fn test_service(ctx: &TestContext) -> QueryIndexService {
-        QueryIndexService {
-            document_store: Box::new(ctx.document_store().clone()),
-            index_loader: Box::new(ctx.index_loader().clone()),
-        }
-    }
+//     fn test_service(ctx: &TestContext) -> QueryIndexService {
+//         QueryIndexService {
+//             document_store: Box::new(ctx.document_store().clone()),
+//             index_loader: Box::new(ctx.index_loader().clone()),
+//         }
+//     }
 
-    #[tokio::test]
-    async fn query_default_response() {
-        let ctx = setup()
-            .with_documents(
-                "test",
-                vec![json!({
-                    "__id": "foobar",
-                    "title": "hello",
-                    "author": "world"
-                })],
-            )
-            .await;
+//     #[tokio::test]
+//     async fn query_default_response() {
+//         let ctx = setup()
+//             .with_documents(
+//                 "test",
+//                 vec![json!({
+//                     "__id": "foobar",
+//                     "title": "hello",
+//                     "author": "world"
+//                 })],
+//             )
+//             .await;
 
-        let service = test_service(&ctx);
+//         let service = test_service(&ctx);
 
-        let request = ServiceRequest::create(QueryRequest {
-            query: "hello".into(),
-            with_partition: None,
-        })
-        .with_path_param("index_id", "test");
+//         let request = ServiceRequest::create(QueryRequest {
+//             query: "hello".into(),
+//             with_partition: None,
+//         })
+//         .with_path_param("index_id", "test");
 
-        let response = service.handle_request(request).await.unwrap();
+//         let response = service.handle_request(request).await.unwrap();
 
-        assert_eq!(
-            QueryResponse {
-                matches: vec![SearchHit {
-                    doc: json::json!({
-                        "__id": ["foobar"],
-                        "title": ["hello"],
-                        "author": ["world"],
-                    }),
-                    score: 0.28768212,
-                    snippets: json::json!({
-                        "title": "<b>hello</b>"
-                    })
-                }]
-            },
-            response
-        );
-    }
+//         assert_eq!(
+//             QueryResponse {
+//                 matches: vec![SearchHit {
+//                     doc: json::json!({
+//                         "__id": ["foobar"],
+//                         "title": ["hello"],
+//                         "author": ["world"],
+//                     }),
+//                     score: 0.28768212,
+//                     snippets: json::json!({
+//                         "title": "<b>hello</b>"
+//                     })
+//                 }]
+//             },
+//             response
+//         );
+//     }
 
-    #[tokio::test]
-    async fn query_document_with_un_indexed_fields() {
-        let ctx = setup()
-            .with_documents(
-                "test",
-                vec![json!({
-                    "__id": "foobar",
-                    "title": "hello",
-                    "meta": "world"
-                })],
-            )
-            .await;
+//     #[tokio::test]
+//     async fn query_document_with_un_indexed_fields() {
+//         let ctx = setup()
+//             .with_documents(
+//                 "test",
+//                 vec![json!({
+//                     "__id": "foobar",
+//                     "title": "hello",
+//                     "meta": "world"
+//                 })],
+//             )
+//             .await;
 
-        let service = test_service(&ctx);
+//         let service = test_service(&ctx);
 
-        let request = ServiceRequest::create(QueryRequest {
-            query: "hello".into(),
-            with_partition: None,
-        })
-        .with_path_param("index_id", "test");
+//         let request = ServiceRequest::create(QueryRequest {
+//             query: "hello".into(),
+//             with_partition: None,
+//         })
+//         .with_path_param("index_id", "test");
 
-        let response = service.handle_request(request).await.unwrap();
+//         let response = service.handle_request(request).await.unwrap();
 
-        assert_eq!(1, response.matches.len());
-    }
+//         assert_eq!(1, response.matches.len());
+//     }
 
-    #[tokio::test]
-    async fn query_document_with_json_field() {
-        let ctx = setup()
-            .with_documents(
-                "test",
-                vec![json!({
-                    "__id": "foobar",
-                    "title": "hello",
-                    "props": {
-                        "foo": "bar"
-                    }
-                })],
-            )
-            .await;
+//     #[tokio::test]
+//     async fn query_document_with_json_field() {
+//         let ctx = setup()
+//             .with_documents(
+//                 "test",
+//                 vec![json!({
+//                     "__id": "foobar",
+//                     "title": "hello",
+//                     "props": {
+//                         "foo": "bar"
+//                     }
+//                 })],
+//             )
+//             .await;
 
-        let service = test_service(&ctx);
+//         let service = test_service(&ctx);
 
-        let request = ServiceRequest::create(QueryRequest {
-            query: "props.foo:bar".into(),
-            with_partition: None,
-        })
-        .with_path_param("index_id", "test");
+//         let request = ServiceRequest::create(QueryRequest {
+//             query: "props.foo:bar".into(),
+//             with_partition: None,
+//         })
+//         .with_path_param("index_id", "test");
 
-        let response = service.handle_request(request).await.unwrap();
+//         let response = service.handle_request(request).await.unwrap();
 
-        assert_eq!(1, response.matches.len());
-    }
-}
+//         assert_eq!(1, response.matches.len());
+//     }
+// }

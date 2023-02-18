@@ -8,9 +8,11 @@ anyhow = "1.0.66"
 async-trait = "0.1.58"
 aws-config = "0.51.0"
 aws-sdk-dynamodb = "0.21.0"
-aws-sdk-s3 = "0.21.0"
+aws-sdk-lambda = "0.21.0"
 aws-sdk-sqs = "0.21.0"
+aws-smithy-types = "0.51.0"
 aws_lambda_events = "0.7.2"
+base64 = "0.21.0"
 chrono = "0.4.23"
 http = "0.2.8"
 lambda_http = {version = "0.7", default-features = false, features = ["apigw_rest"]}
@@ -22,6 +24,7 @@ tantivy = {version = "0.18.1"}
 tantivy-common = "0.3.0"
 thiserror = "1.0.37"
 tokio = {version = "1", features = ["full"]}
+tokio-stream = "0.1.11"
 tracing = {version = "0.1", features = ["log"]}
 tracing-subscriber = {version = "0.3", default-features = false, features = ["fmt", "json", "std"]}
 uuid = "1.2.1"

@@ -192,7 +192,7 @@ where
 {
     tracing_subscriber::fmt()
         .json()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::WARN)
         .with_target(false)
         .without_time()
         .init();

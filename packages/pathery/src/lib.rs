@@ -1,6 +1,8 @@
 pub mod directory;
+pub mod function;
 pub mod index;
 pub mod lambda;
+pub mod pagination;
 pub mod schema;
 pub mod search_doc;
 pub mod serialize;

@@ -27,7 +27,6 @@ import { PatheryConfig } from "./config";
 import * as fs from "fs";
 import { RustFunction } from "./rust-function";
 import { PatheryDashboard } from "./pathery-dashboard";
-import { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 import {
   AttributeType,
   BillingMode,
@@ -77,8 +76,6 @@ export class PatheryStack extends Stack {
 
   private readonly table: ITable;
 
-  private bucket: IBucket;
-
   private indexWriterQueue: IQueue;
 
   private deleteQueue: IQueue;
@@ -99,8 +96,6 @@ export class PatheryStack extends Stack {
       timeToLiveAttribute: "__ttl",
     });
 
-    this.bucket = new Bucket(this, "DataBucket");
-
     this.deleteQueue = new Queue(this, "DeleteQueue", {
       deliveryDelay: Duration.minutes(15),
       visibilityTimeout: Duration.minutes(2),
@@ -120,19 +115,20 @@ export class PatheryStack extends Stack {
         },
       ],
     });
-
     vpc.addGatewayEndpoint("S3Endpoint", {
       service: GatewayVpcEndpointAwsService.S3,
     });
-
     vpc.addGatewayEndpoint("DynamoEndpoint", {
       service: GatewayVpcEndpointAwsService.DYNAMODB,
     });
-
     const sqsEndpoint = vpc.addInterfaceEndpoint("SqsGateway", {
       service: InterfaceVpcEndpointAwsService.SQS,
     });
     sqsEndpoint.connections.allowDefaultPortFromAnyIpv4();
+    const lambdaEndpoint = vpc.addInterfaceEndpoint("LambdaEndpoint", {
+      service: InterfaceVpcEndpointAwsService.LAMBDA,
+    });
+    lambdaEndpoint.connections.allowDefaultPortFromAnyIpv4();
 
     const efs = new FileSystem(this, "Filesystem", {
       vpc,
@@ -170,6 +166,30 @@ export class PatheryStack extends Stack {
     batchIndex.addLayers(configLayer);
     this.indexWriterProducer(batchIndex);
 
+    const queryIndexPartition = new RustFunction(
+      this,
+      "query-index-partition-fn",
+      {
+        memorySize: props.queryHandler?.memorySize ?? 3008,
+        timeout: Duration.seconds(5),
+        vpc,
+        vpcSubnets: {
+          subnets: vpc.isolatedSubnets,
+        },
+        filesystem: aws_lambda.FileSystem.fromEfsAccessPoint(
+          accessPoint,
+          "/mnt/pathery-data"
+        ),
+      }
+    );
+    queryIndexPartition.addLayers(configLayer);
+    this.table.grantReadData(queryIndexPartition);
+    queryIndexPartition.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
+    queryIndexPartition.addEnvironment(
+      "ASYNC_DELETE_QUEUE_URL",
+      this.deleteQueue.queueUrl
+    );
+
     const queryIndex = new RustFunction(this, "query-index", {
       memorySize: props.queryHandler?.memorySize ?? 3008,
       timeout: Duration.seconds(5),
@@ -188,6 +208,11 @@ export class PatheryStack extends Stack {
     queryIndex.addEnvironment(
       "ASYNC_DELETE_QUEUE_URL",
       this.deleteQueue.queueUrl
+    );
+    queryIndexPartition.grantInvoke(queryIndex);
+    queryIndex.addEnvironment(
+      "QUERY_INDEX_PARTITION_NAME",
+      queryIndexPartition.functionName
     );
 
     const statsIndex = new RustFunction(this, "stats-index", {
@@ -275,12 +300,6 @@ export class PatheryStack extends Stack {
         batchSize: 10,
       })
     );
-    this.bucket.grantRead(indexWriterWorker);
-    this.bucket.grantDelete(indexWriterWorker);
-    indexWriterWorker.addEnvironment(
-      "DATA_BUCKET_NAME",
-      this.bucket.bucketName
-    );
     this.table.grantReadWriteData(indexWriterWorker);
     indexWriterWorker.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
     this.deleteQueue.grantSendMessages(indexWriterWorker);
@@ -318,9 +337,6 @@ export class PatheryStack extends Stack {
   }
 
   private indexWriterProducer(lambda: Function) {
-    this.bucket.grantWrite(lambda);
-    lambda.addEnvironment("DATA_BUCKET_NAME", this.bucket.bucketName);
-
     this.table.grantWriteData(lambda);
     lambda.addEnvironment("DATA_TABLE_NAME", this.table.tableName);
 
