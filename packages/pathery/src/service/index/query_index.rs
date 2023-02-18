@@ -11,12 +11,14 @@ use crate::function::query_index_partition::client::LambdaQueryIndexPartitionCli
 use crate::function::query_index_partition::PartitionSearchHit;
 use crate::index::{IndexExt, IndexLoader, LambdaIndexLoader};
 use crate::json;
+use crate::pagination::PaginationToken;
 use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
 use crate::store::document::{DDBDocumentStore, DocumentStore};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct QueryRequest {
     pub query: String,
+    pub pagination_token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -29,6 +31,7 @@ pub struct SearchHit {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct QueryResponse {
     pub matches: Vec<SearchHit>,
+    pub pagination_token: Option<String>,
 }
 
 pub struct QueryIndexService {
@@ -58,12 +61,26 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
         let total_partitions = (num_docs / 60_000) + 1;
         info!("Total partitions: {}", total_partitions);
 
+        let mut pagination_token = match body.pagination_token {
+            Some(token) => PaginationToken::parse(token),
+            None => {
+                let mut pagination_token =
+                    PaginationToken::new(&body.query, total_partitions as usize);
+                let metas = index.load_metas().unwrap();
+                let segments = metas.segments;
+                let segments_json = serde_json::to_value(segments).unwrap();
+                pagination_token.import_segments_json(segments_json);
+                pagination_token
+            }
+        };
+
         let requests = (0..total_partitions).map(|partition_n| {
             self.query_index_paritition_client.query_partition(
                 index_id.clone(),
-                body.query.clone(),
-                total_partitions as usize,
+                pagination_token.get_query(),
+                pagination_token.get_offset(partition_n as usize),
                 partition_n as usize,
+                pagination_token.segments_for_partition(partition_n as usize),
             )
         });
 
@@ -78,8 +95,17 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
         matches.sort_by(|a, b| b.score.total_cmp(&a.score));
         matches.truncate(10);
 
+        for match_one in &matches {
+            pagination_token.inc_offset(match_one.partition_n)
+        }
+
+        println!("{}", serde_json::to_string(&pagination_token).unwrap());
+
         if matches.len() == 0 {
-            return Ok(QueryResponse { matches: vec![] });
+            return Ok(QueryResponse {
+                matches: vec![],
+                pagination_token: None,
+            });
         }
 
         let retrieved_matches = self
@@ -168,7 +194,10 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
             })
             .collect();
 
-        Ok(QueryResponse { matches })
+        Ok(QueryResponse {
+            matches,
+            pagination_token: Some(pagination_token.serialize()),
+        })
     }
 }
 

@@ -7,6 +7,7 @@ use tantivy::schema::Field;
 use tantivy::{Index, IndexWriter};
 
 use crate::directory::PatheryDirectory;
+use crate::pagination::SegmentMeta;
 use crate::schema::{SchemaLoader, SchemaProvider};
 use crate::service::ServiceError;
 use crate::worker::async_delete::client::{AsyncDeleteClient, LambdaAsyncDeleteClient};
@@ -15,7 +16,7 @@ pub trait IndexLoader: Send + Sync {
     fn load_index(
         &self,
         index_id: &str,
-        with_partition: Option<(usize, usize)>,
+        segments: Option<Vec<SegmentMeta>>,
     ) -> Result<Index, ServiceError>;
 }
 
@@ -41,12 +42,12 @@ impl IndexLoader for LambdaIndexLoader {
     fn load_index(
         &self,
         index_id: &str,
-        with_partition: Option<(usize, usize)>,
+        segments: Option<Vec<SegmentMeta>>,
     ) -> Result<Index, ServiceError> {
         let directory_path = format!("/mnt/pathery-data/{index_id}");
 
         let mut index = if let Ok(existing_dir) =
-            PatheryDirectory::open(&directory_path, with_partition, &self.async_delete_client)
+            PatheryDirectory::open(&directory_path, &self.async_delete_client, segments)
         {
             Index::open(existing_dir).expect("Index should be openable")
         } else {
@@ -118,7 +119,7 @@ pub mod test_util {
         fn load_index(
             &self,
             index_id: &str,
-            _with_partition: Option<(usize, usize)>,
+            _segments: Option<Vec<SegmentMeta>>,
         ) -> Result<Index, ServiceError> {
             let mut table = self.table.lock().unwrap();
 
