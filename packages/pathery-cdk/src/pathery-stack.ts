@@ -226,6 +226,12 @@ export class PatheryStack extends Stack {
       ),
     });
     statsIndex.addLayers(configLayer);
+    // FIXME: This doesn't actually get used but is required to be
+    //        set because of some tangled internal dependencies.
+    statsIndex.addEnvironment(
+      "ASYNC_DELETE_QUEUE_URL",
+      this.deleteQueue.queueUrl
+    );
 
     const deleteDoc = new RustFunction(this, "delete-doc");
     deleteDoc.addLayers(configLayer);
