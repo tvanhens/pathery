@@ -42,8 +42,8 @@ impl LambdaQueryIndexPartitionClient {
         let input = serde_json::to_vec(&input).expect("should serialize");
         let input = Blob::new(input);
         let request = request.payload(input);
-        let response = request.send().await;
-        let response = response.expect("should succeed");
+        let response = tokio::spawn(request.send());
+        let response = response.await.unwrap().expect("should succeed");
 
         let payload = response.payload().expect("payload should exist");
         let payload = payload.to_owned().into_inner();

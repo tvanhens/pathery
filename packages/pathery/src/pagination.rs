@@ -12,7 +12,7 @@ pub struct SegmentMeta {
     extra: HashMap<String, Value>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct PaginationToken {
     query: String,
     segments: Vec<SegmentMeta>,

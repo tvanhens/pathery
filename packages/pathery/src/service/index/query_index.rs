@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -39,7 +40,7 @@ pub struct QueryIndexService {
 
     document_store: Box<dyn DocumentStore>,
 
-    query_index_paritition_client: LambdaQueryIndexPartitionClient,
+    query_index_paritition_client: Arc<LambdaQueryIndexPartitionClient>,
 }
 
 #[async_trait]
@@ -74,20 +75,30 @@ impl ServiceHandler<QueryRequest, QueryResponse> for QueryIndexService {
             }
         };
 
-        let requests = (0..total_partitions).map(|partition_n| {
-            self.query_index_paritition_client.query_partition(
-                index_id.clone(),
-                pagination_token.get_query(),
-                pagination_token.get_offset(partition_n as usize),
-                partition_n as usize,
-                pagination_token.segments_for_partition(partition_n as usize),
-            )
-        });
+        let requests: Vec<_> = (0..total_partitions)
+            .map(|partition_n| {
+                let query_client = Arc::clone(&self.query_index_paritition_client);
+                let index_id = index_id.clone();
+                let ro_token = pagination_token.clone();
+
+                tokio::spawn(async move {
+                    query_client
+                        .query_partition(
+                            index_id.clone(),
+                            ro_token.get_query(),
+                            ro_token.get_offset(partition_n as usize),
+                            partition_n as usize,
+                            ro_token.segments_for_partition(partition_n as usize),
+                        )
+                        .await
+                })
+            })
+            .collect();
 
         let mut matches: Vec<PartitionSearchHit> = Vec::new();
 
         for request in requests {
-            let mut response = request.await;
+            let mut response = request.await.unwrap();
             let response = response.matches.as_mut();
             matches.append(response);
         }
@@ -209,7 +220,9 @@ impl QueryIndexService {
         QueryIndexService {
             document_store: Box::new(document_store),
             index_loader: Box::new(index_loader.await),
-            query_index_paritition_client: LambdaQueryIndexPartitionClient::create().await,
+            query_index_paritition_client: Arc::new(
+                LambdaQueryIndexPartitionClient::create().await,
+            ),
         }
     }
 }
